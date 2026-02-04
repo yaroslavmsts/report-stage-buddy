@@ -104,55 +104,95 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     extractedText.histologyFindings.push('Invasive nonmucinous adenocarcinoma with lepidic component');
   }
 
-  // Extract measurements - greatest dimension
-  const greatestDimPatterns = [
+  // FLEXIBLE EXTRACTION: Extract tumor size from various formats
+  // These patterns are ordered from most specific to most general
+  const sizePatterns = [
+    // Formal patterns
     /greatest\s*dimension[:\s]+(\d+\.?\d*)\s*cm/i,
     /tumor\s*size[:\s]+(\d+\.?\d*)\s*cm/i,
-    /measuring\s+(\d+\.?\d*)\s*cm/i,
     /(\d+\.?\d*)\s*cm\s*(in\s*)?greatest\s*dimension/i,
-    /(\d+\.?\d*)\s*x\s*\d+\.?\d*\s*x\s*\d+\.?\d*\s*cm/i, // Takes first dimension from AxBxC
+    /measuring\s+(\d+\.?\d*)\s*cm/i,
+    /measures?\s+(\d+\.?\d*)\s*cm/i,
+    // Dimension patterns (AxBxC format - takes largest)
+    /(\d+\.?\d*)\s*x\s*(\d+\.?\d*)\s*x\s*(\d+\.?\d*)\s*cm/i,
+    /(\d+\.?\d*)\s*x\s*(\d+\.?\d*)\s*cm/i,
+    // Informal patterns - more flexible
+    /(\d+\.?\d*)\s*cm\s+(tumor|mass|nodule|lesion)/i,
+    /(tumor|mass|nodule|lesion)\s+(\d+\.?\d*)\s*cm/i,
+    /(\d+\.?\d*)\s*cm\s+(in\s+)?(size|diameter)/i,
+    /(size|diameter)[:\s]+(\d+\.?\d*)\s*cm/i,
+    // Very flexible - just number followed by cm (with context hints)
+    /(?:identified|found|noted|shows?|reveals?|demonstrates?)\s+(?:a\s+)?(\d+\.?\d*)\s*cm/i,
+    // Generic pattern - number cm appearing near tumor-related words
+    /(\d+\.?\d*)\s*cm(?=.*(?:tumor|carcinoma|adenocarcinoma|mass|nodule|lesion))/i,
+    // Fallback: any size in cm format (most permissive)
+    /\b(\d+\.?\d*)\s*cm\b/i,
   ];
 
-  for (const pattern of greatestDimPatterns) {
+  for (const pattern of sizePatterns) {
     const match = text.match(pattern);
     if (match) {
-      inputs.measurements_cm.greatest_dimension_cm = parseFloat(match[1]);
-      inputs.measurements_cm.total_tumor_size_cm = parseFloat(match[1]);
-      extractedText.measurementFindings.push(`Greatest dimension: ${match[1]} cm`);
-      break;
+      let size: number;
+      
+      // Handle AxBxC format - take the largest dimension
+      if (pattern.source.includes('x\\s*')) {
+        const dims = match.slice(1).filter(d => d && !isNaN(parseFloat(d))).map(d => parseFloat(d));
+        size = Math.max(...dims);
+      } else if (match[2] && !isNaN(parseFloat(match[2]))) {
+        // Some patterns capture size in group 2
+        size = parseFloat(match[2]);
+      } else {
+        size = parseFloat(match[1]);
+      }
+      
+      if (!isNaN(size) && size > 0 && size < 50) { // Reasonable tumor size range
+        inputs.measurements_cm.greatest_dimension_cm = size;
+        inputs.measurements_cm.total_tumor_size_cm = size;
+        extractedText.measurementFindings.push(`Tumor size: ${size} cm`);
+        break;
+      }
     }
   }
 
-  // Extract invasive size
+  // Extract invasive size - also more flexible
   const invasiveSizePatterns = [
-    /invasive\s*(component|size|focus)[:\s]+(\d+\.?\d*)\s*cm/i,
+    /invasive\s*(component|size|focus|portion)[:\s]+(\d+\.?\d*)\s*cm/i,
     /invasive\s*tumor[:\s]+(\d+\.?\d*)\s*cm/i,
     /invasion[:\s]+(\d+\.?\d*)\s*cm/i,
+    /(\d+\.?\d*)\s*cm\s+invasive/i,
+    /invasive[:\s]+(\d+\.?\d*)\s*cm/i,
   ];
 
   for (const pattern of invasiveSizePatterns) {
     const match = text.match(pattern);
     if (match) {
       const size = parseFloat(match[2] || match[1]);
-      inputs.measurements_cm.invasive_size_cm = size;
-      extractedText.measurementFindings.push(`Invasive size: ${size} cm`);
-      break;
+      if (!isNaN(size) && size > 0) {
+        inputs.measurements_cm.invasive_size_cm = size;
+        extractedText.measurementFindings.push(`Invasive size: ${size} cm`);
+        break;
+      }
     }
   }
 
-  // Extract percent invasive
+  // Extract percent invasive - also more flexible
   const percentPatterns = [
     /(\d+)\s*%\s*invasive/i,
     /invasive[:\s]+(\d+)\s*%/i,
     /percent\s*invasive[:\s]+(\d+)/i,
+    /(\d+)\s*percent\s*invasive/i,
+    /approximately\s+(\d+)\s*%/i,
   ];
 
   for (const pattern of percentPatterns) {
     const match = text.match(pattern);
     if (match) {
-      inputs.measurements_cm.percent_invasive_0_to_100 = parseInt(match[1]);
-      extractedText.measurementFindings.push(`Percent invasive: ${match[1]}%`);
-      break;
+      const percent = parseInt(match[1]);
+      if (!isNaN(percent) && percent >= 0 && percent <= 100) {
+        inputs.measurements_cm.percent_invasive_0_to_100 = percent;
+        extractedText.measurementFindings.push(`Percent invasive: ${match[1]}%`);
+        break;
+      }
     }
   }
 
@@ -309,13 +349,13 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
     };
   }
 
-  // Validate size basis present
+  // Validate size basis present - improved messaging for auto-calculate mode
   if (size_basis_cm === null) {
     return {
       applicability: 'indeterminate',
       t_category: null,
       reason:
-        'Cannot determine pT1a vs pT1b because required size basis is missing (need greatest dimension OR invasive size/estimate if lepidic-component rule applies).',
+        'No tumor size measurements could be extracted from the report. Please ensure the report includes size information (e.g., "0.8 cm tumor" or "tumor size: 1.2 cm").',
     };
   }
 
@@ -352,6 +392,46 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
   };
 }
 
+// Build descriptive reasoning for auto-calculated results
+function buildAutoCalculateReasoning(
+  calculatedResult: ValidationResult,
+  inputs: ValidationInputs
+): string {
+  const parts: string[] = [];
+  
+  // Describe what we found
+  if (inputs.measurements_cm.greatest_dimension_cm !== null) {
+    parts.push(`tumor size of ${inputs.measurements_cm.greatest_dimension_cm} cm`);
+  }
+  
+  if (inputs.pleural_invasion.has_visceral_pleural_invasion) {
+    if (inputs.pleural_invasion.pl_status) {
+      parts.push(`visceral pleural invasion (${inputs.pleural_invasion.pl_status})`);
+    } else {
+      parts.push('visceral pleural invasion');
+    }
+  } else {
+    parts.push('no visceral pleural invasion');
+  }
+  
+  if (inputs.histology.is_AIS) {
+    parts.push('adenocarcinoma in situ pattern');
+  } else if (inputs.histology.is_MIA) {
+    parts.push('minimally invasive adenocarcinoma pattern');
+  }
+  
+  const findingsDescription = parts.length > 0 
+    ? `Based on ${parts.join(' and ')}`
+    : 'Based on the available findings';
+  
+  // Build the conclusion
+  if (calculatedResult.t_category) {
+    return `${findingsDescription}, the suggested stage is ${calculatedResult.t_category}. ${calculatedResult.reason}`;
+  }
+  
+  return `${findingsDescription}. ${calculatedResult.reason}`;
+}
+
 // Compare reported stage with calculated stage
 export function compareStages(
   reportedStage: string | null,
@@ -364,25 +444,42 @@ export function compareStages(
   details: string;
   isPleuralInvasionMismatch?: boolean;
 } {
-  // Auto-calculate mode: No reported stage found but we can calculate one
+  // Auto-calculate mode: No reported stage found
   if (!reportedStage) {
-    const hasFindings = calculatedResult.t_category !== null;
+    const hasCalculatedStage = calculatedResult.t_category !== null;
+    const hasAnyFindings = 
+      inputs.measurements_cm.greatest_dimension_cm !== null ||
+      inputs.pleural_invasion.has_visceral_pleural_invasion ||
+      inputs.histology.is_AIS ||
+      inputs.histology.is_MIA ||
+      inputs.superficial_spreading.is_superficial_spreading_tumor;
     
-    if (hasFindings) {
+    if (hasCalculatedStage) {
+      const reasoning = buildAutoCalculateReasoning(calculatedResult, inputs);
       return {
         isMatch: true, // Treat as success since we're providing a suggestion
         isAutoCalculated: true,
-        message: 'Suggested Stage',
-        details: `No reported stage found in the text. Based on the findings, the suggested stage is ${calculatedResult.t_category}. ${calculatedResult.reason}`,
+        message: `Suggested Stage: ${calculatedResult.t_category}`,
+        details: reasoning,
       };
     }
     
-    // No stage and no calculable result
+    // We have some findings but can't calculate a stage
+    if (hasAnyFindings) {
+      return {
+        isMatch: false,
+        isAutoCalculated: true,
+        message: 'Unable to Calculate Stage',
+        details: buildAutoCalculateReasoning(calculatedResult, inputs),
+      };
+    }
+    
+    // No stage and no meaningful findings
     return {
       isMatch: false,
       isAutoCalculated: true,
-      message: 'Insufficient Data',
-      details: 'No reported stage found and insufficient findings to calculate a stage. ' + calculatedResult.reason,
+      message: 'No Findings Detected',
+      details: 'No tumor size, staging, or relevant findings could be extracted from the report. Please ensure the report contains standard pathology terminology such as tumor size (e.g., "0.8 cm tumor") or staging information.',
     };
   }
 
