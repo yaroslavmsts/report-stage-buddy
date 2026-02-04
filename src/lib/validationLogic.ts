@@ -1,4 +1,16 @@
-// CAP Lung 4.0.0.2 AJCC8 pT1a vs pT1b Decision Tree Implementation
+// AJCC 8th Edition Lung Cancer pT Staging Validation Engine
+// Uses STAGING_RULES as the Source of Truth
+
+import { 
+  STAGING_RULES, 
+  getStagingSource, 
+  getRulesWithOverrides, 
+  getSizeBasedStage,
+  matchesOverride,
+  type StagingRule 
+} from './stagingRules';
+
+export { getStagingSource };
 
 export interface ValidationInputs {
   histology: {
@@ -345,75 +357,77 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
     size_basis_cm = inputs.measurements_cm.greatest_dimension_cm;
   }
 
-  // Decision tree traversal
-  // Check AIS
+// Decision tree traversal using STAGING_RULES as Source of Truth
+  // Get override rules sorted by priority
+  const overrideRules = getRulesWithOverrides();
+  
+  // Collect all findings for override matching
+  const findings: string[] = [];
+  
+  // Add histology findings
+  if (inputs.histology.is_AIS) {
+    findings.push('AIS', 'adenocarcinoma in situ');
+  }
+  if (inputs.histology.is_MIA) {
+    findings.push('MIA', 'minimally invasive adenocarcinoma');
+  }
+  
+  // Add pleural invasion findings
+  if (inputs.pleural_invasion.has_visceral_pleural_invasion) {
+    findings.push('visceral pleural invasion');
+    if (inputs.pleural_invasion.pl_status) {
+      findings.push(inputs.pleural_invasion.pl_status);
+    }
+  }
+  
+  // Add direct invasion findings
+  if (inputs.direct_invasion.chest_wall) findings.push('chest wall');
+  if (inputs.direct_invasion.phrenic_nerve) findings.push('phrenic nerve');
+  if (inputs.direct_invasion.pericardium) findings.push('pericardium', 'parietal pericardium');
+  if (inputs.direct_invasion.diaphragm) findings.push('diaphragm');
+  if (inputs.direct_invasion.main_bronchus) findings.push('main bronchus');
+
+  // STEP 1: Check for special histology types (pTis, pT1mi)
   if (inputs.histology.is_AIS) {
     return {
       applicability: 'not_applicable',
       t_category: 'pTis(AIS)',
-      reason: 'Adenocarcinoma in situ is staged as pTis(AIS), not pT1a/pT1b.',
+      reason: `${getStagingSource()}: Adenocarcinoma in situ is staged as pTis(AIS).`,
     };
   }
 
-  // Check MIA
   if (inputs.histology.is_MIA) {
     return {
       applicability: 'not_applicable',
       t_category: 'pT1mi',
-      reason: 'Minimally invasive adenocarcinoma is staged as pT1mi, not pT1a/pT1b.',
+      reason: `${getStagingSource()}: Minimally invasive adenocarcinoma is staged as pT1mi.`,
     };
   }
 
-  // PRIORITY: Check pleural invasion BEFORE size-based staging
-  // Visceral pleural invasion (PL1 or PL2) automatically upgrades to pT2a
-  if (
-    inputs.pleural_invasion.has_visceral_pleural_invasion &&
-    (inputs.pleural_invasion.pl_status === 'PL1' || inputs.pleural_invasion.pl_status === 'PL2')
-  ) {
-    return {
-      applicability: 'applicable',
-      t_category: 'pT2a',
-      basis: 'pleural_invasion',
-      reason: `Visceral pleural invasion (${inputs.pleural_invasion.pl_status}) is present. Per AJCC 8th edition, tumors with visceral pleural invasion are classified as pT2a regardless of tumor size.`,
-    };
+  // STEP 2: Check OVERRIDE rules in priority order (before size-based staging)
+  // This ensures findings like visceral pleural invasion take precedence
+  for (const rule of overrideRules) {
+    if (rule.overrides) {
+      for (const finding of findings) {
+        if (matchesOverride(finding, rule.overrides)) {
+          // Build descriptive reason
+          const matchedOverride = rule.overrides.find(o => 
+            finding.toLowerCase().includes(o.toLowerCase()) || 
+            o.toLowerCase().includes(finding.toLowerCase())
+          );
+          
+          return {
+            applicability: 'applicable',
+            t_category: rule.stage,
+            basis: 'override',
+            reason: `${getStagingSource()}: ${finding.toUpperCase()} is present. Per staging criteria: "${rule.criteria}". This overrides tumor size-based staging.`,
+          };
+        }
+      }
+    }
   }
 
-  // PL3 indicates parietal pleural invasion - pT3 or higher
-  if (
-    inputs.pleural_invasion.has_visceral_pleural_invasion &&
-    inputs.pleural_invasion.pl_status === 'PL3'
-  ) {
-    return {
-      applicability: 'applicable',
-      t_category: 'pT3',
-      basis: 'pleural_invasion',
-      reason: 'PL3 indicates invasion of parietal pleura, which is classified as pT3.',
-    };
-  }
-
-  // Check for direct invasion patterns (pT3 criteria)
-  const hasDirectInvasion = 
-    inputs.direct_invasion.chest_wall ||
-    inputs.direct_invasion.phrenic_nerve ||
-    inputs.direct_invasion.pericardium ||
-    inputs.direct_invasion.diaphragm;
-  
-  if (hasDirectInvasion) {
-    const invadedStructures: string[] = [];
-    if (inputs.direct_invasion.chest_wall) invadedStructures.push('chest wall');
-    if (inputs.direct_invasion.phrenic_nerve) invadedStructures.push('phrenic nerve');
-    if (inputs.direct_invasion.pericardium) invadedStructures.push('pericardium');
-    if (inputs.direct_invasion.diaphragm) invadedStructures.push('diaphragm');
-    
-    return {
-      applicability: 'applicable',
-      t_category: 'pT3',
-      basis: 'direct_invasion',
-      reason: `Direct invasion into ${invadedStructures.join(', ')} is present. Per AJCC 8th edition, tumors with direct invasion of these structures are classified as pT3.`,
-    };
-  }
-
-  // Check superficial spreading override
+  // STEP 3: Check superficial spreading override (special case)
   if (
     inputs.superficial_spreading.is_superficial_spreading_tumor &&
     inputs.superficial_spreading.invasive_component_limited_to_bronchial_wall
@@ -422,95 +436,29 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
       applicability: 'applicable',
       t_category: 'pT1a',
       basis: 'override',
-      reason:
-        'Superficial spreading tumor with invasive component limited to bronchial wall is classified as pT1a regardless of overall size.',
+      reason: `${getStagingSource()}: Superficial spreading tumor with invasive component limited to bronchial wall is classified as pT1a regardless of overall size.`,
     };
   }
 
-  // Validate size basis present - improved messaging for auto-calculate mode
+  // STEP 4: Validate size basis is present for size-based staging
   if (size_basis_cm === null) {
     return {
       applicability: 'indeterminate',
       t_category: null,
-      reason:
-        'No tumor size measurements could be extracted from the report. Please ensure the report includes size information (e.g., "0.8 cm tumor" or "tumor size: 1.2 cm").',
+      reason: 'No tumor size measurements could be extracted from the report. Please ensure the report includes size information (e.g., "0.8 cm tumor" or "tumor size: 1.2 cm").',
     };
   }
 
-  // Check T1a size
-  if (size_basis_cm <= 1.0) {
+  // STEP 5: Size-based staging using rules database
+  const sizeRule = getSizeBasedStage(size_basis_cm);
+  
+  if (sizeRule) {
     return {
       applicability: 'applicable',
-      t_category: 'pT1a',
+      t_category: sizeRule.stage,
       basis: 'size_basis_cm',
       size_basis_cm: size_basis_cm,
-      reason: 'Size basis ≤ 1.0 cm.',
-    };
-  }
-
-  // Check T1b size
-  if (size_basis_cm > 1.0 && size_basis_cm <= 2.0) {
-    return {
-      applicability: 'applicable',
-      t_category: 'pT1b',
-      basis: 'size_basis_cm',
-      size_basis_cm: size_basis_cm,
-      reason: 'Size basis > 1.0 cm and ≤ 2.0 cm.',
-    };
-  }
-
-  // Check T1c size (>2.0 to ≤3.0 cm)
-  if (size_basis_cm > 2.0 && size_basis_cm <= 3.0) {
-    return {
-      applicability: 'applicable',
-      t_category: 'pT1c',
-      basis: 'size_basis_cm',
-      size_basis_cm: size_basis_cm,
-      reason: 'Size basis > 2.0 cm and ≤ 3.0 cm.',
-    };
-  }
-
-  // Check T2a size (>3.0 to ≤4.0 cm) - note: visceral pleural invasion already handled above
-  if (size_basis_cm > 3.0 && size_basis_cm <= 4.0) {
-    return {
-      applicability: 'applicable',
-      t_category: 'pT2a',
-      basis: 'size_basis_cm',
-      size_basis_cm: size_basis_cm,
-      reason: 'Size basis > 3.0 cm and ≤ 4.0 cm.',
-    };
-  }
-
-  // Check T2b size (>4.0 to ≤5.0 cm)
-  if (size_basis_cm > 4.0 && size_basis_cm <= 5.0) {
-    return {
-      applicability: 'applicable',
-      t_category: 'pT2b',
-      basis: 'size_basis_cm',
-      size_basis_cm: size_basis_cm,
-      reason: 'Size basis > 4.0 cm and ≤ 5.0 cm.',
-    };
-  }
-
-  // Check T3 size (>5.0 to ≤7.0 cm)
-  if (size_basis_cm > 5.0 && size_basis_cm <= 7.0) {
-    return {
-      applicability: 'applicable',
-      t_category: 'pT3',
-      basis: 'size_basis_cm',
-      size_basis_cm: size_basis_cm,
-      reason: 'Size basis > 5.0 cm and ≤ 7.0 cm.',
-    };
-  }
-
-  // pT4: Tumor > 7.0 cm or invades specific structures
-  if (size_basis_cm > 7.0) {
-    return {
-      applicability: 'applicable',
-      t_category: 'pT4',
-      basis: 'size_basis_cm',
-      size_basis_cm: size_basis_cm,
-      reason: 'Size basis > 7.0 cm. Per AJCC 8th edition, tumors larger than 7.0 cm are classified as pT4.',
+      reason: `${getStagingSource()}: ${sizeRule.criteria}. Measured size: ${size_basis_cm} cm.`,
     };
   }
 
