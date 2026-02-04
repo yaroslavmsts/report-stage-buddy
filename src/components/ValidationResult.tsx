@@ -1,4 +1,4 @@
-import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, MapPin, TrendingUp } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, DollarSign, Heart, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ValidationResult as ValidationResultType, ParsedReport } from '@/lib/validationLogic';
 
@@ -20,7 +20,6 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
   const isAutoCalculated = comparison.isAutoCalculated && comparison.isMatch;
   const isIndeterminate = calculatedResult.applicability === 'indeterminate' && !comparison.isAutoCalculated;
   const isInsufficientData = comparison.isAutoCalculated && !comparison.isMatch;
-  const isOutsideScope = calculatedResult.applicability === 'outside_scope';
 
   const getStatusConfig = () => {
     if (isAutoCalculated) {
@@ -70,6 +69,28 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
   const calculatedStageLabel = isAutoCalculated ? 'Suggested Stage' : 'Calculated Stage';
   const hasCalculatedStage = calculatedResult.t_category !== null;
 
+  // Get survival percentage as number for progress bar
+  const getSurvivalPercentage = (): number => {
+    if (!calculatedResult.survival) return 0;
+    const match = calculatedResult.survival.five_year_survival.match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : 0;
+  };
+
+  const survivalPercentage = getSurvivalPercentage();
+
+  // Get survival color based on percentage
+  const getSurvivalColor = (percentage: number): string => {
+    if (percentage >= 70) return 'text-success';
+    if (percentage >= 40) return 'text-warning';
+    return 'text-destructive';
+  };
+
+  const getSurvivalBgColor = (percentage: number): string => {
+    if (percentage >= 70) return 'bg-success';
+    if (percentage >= 40) return 'bg-warning';
+    return 'bg-destructive';
+  };
+
   return (
     <div className="space-y-3 sm:space-y-4">
       {/* Main Status Card */}
@@ -91,43 +112,75 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
         </CardContent>
       </Card>
 
-      {/* AJCC Prognostic Group Card */}
+      {/* AJCC Prognostic Group Card - Main staging focus */}
       {calculatedResult.stage_group && (
         <Card className="border-2 border-primary/30 bg-primary/5">
           <CardContent className="pt-4 sm:pt-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-              <div className="flex items-center gap-3">
-                <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-                <div>
-                  <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">AJCC Prognostic Group</p>
-                  <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-primary">{calculatedResult.stage_group}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 sm:gap-6">
-                {calculatedResult.survival && (
-                  <div className="text-left sm:text-center">
-                    <div className="flex items-center gap-1.5">
-                      <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-success" />
-                      <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">5-Year Survival</p>
-                    </div>
-                    <p className="text-lg sm:text-xl font-bold text-success">{calculatedResult.survival.five_year_survival}</p>
-                  </div>
-                )}
-                {calculatedResult.icd10 && (
-                  <div className="text-left sm:text-right">
-                    <div className="flex items-center gap-1.5 sm:justify-end">
-                      <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                      <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">ICD-10</p>
-                    </div>
-                    <p className="text-lg sm:text-xl font-bold text-foreground">{calculatedResult.icd10.code}</p>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground">{calculatedResult.icd10.site}</p>
-                  </div>
-                )}
+            <div className="flex items-center gap-3">
+              <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+              <div>
+                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">AJCC Prognostic Group</p>
+                <p className="text-2xl sm:text-3xl lg:text-4xl font-bold text-primary">{calculatedResult.stage_group}</p>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Smart Value-Adds: Billing & Prognostic Sections */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        {/* Prognostic Outlook Card */}
+        {calculatedResult.survival && (
+          <Card className="border border-success/30 bg-success/5">
+            <CardHeader className="pb-2 sm:pb-3">
+              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                <Heart className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
+                Prognostic Outlook
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-1">5-Year Pathologic Survival</p>
+                <p className={`text-2xl sm:text-3xl font-bold ${getSurvivalColor(survivalPercentage)}`}>
+                  {calculatedResult.survival.five_year_survival}
+                </p>
+              </div>
+              {/* Progress Bar */}
+              <div className="w-full bg-muted rounded-full h-2 sm:h-2.5">
+                <div 
+                  className={`h-full rounded-full transition-all duration-500 ${getSurvivalBgColor(survivalPercentage)}`}
+                  style={{ width: `${survivalPercentage}%` }}
+                />
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">
+                Based on {calculatedResult.stage_group} pathologic staging
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Billing & Coding Card */}
+        {calculatedResult.icd10 && (
+          <Card className="border border-info/30 bg-info/5">
+            <CardHeader className="pb-2 sm:pb-3">
+              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-info" />
+                Billing & Coding
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-1">ICD-10-CM Code</p>
+                <p className="text-2xl sm:text-3xl font-bold text-info">{calculatedResult.icd10.code}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs sm:text-sm font-medium text-foreground">{calculatedResult.icd10.site}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">{calculatedResult.icd10.description}</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* TNM Summary Card */}
       <Card>
@@ -233,7 +286,10 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
       {/* Extracted Findings Card */}
       <Card>
         <CardHeader className="pb-2 sm:pb-3">
-          <CardTitle className="text-base sm:text-lg">Extracted Findings</CardTitle>
+          <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+            <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+            Extracted Findings
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3 sm:space-y-4">
@@ -333,6 +389,15 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
           </div>
         </CardContent>
       </Card>
+
+      {/* Source Attribution Footer */}
+      <div className="text-center pt-2 pb-1">
+        <p className="text-[9px] sm:text-[10px] text-muted-foreground/70 leading-relaxed">
+          Survival data and ICD-10 codes sourced from AJCC 8th Edition and PathologyOutlines.com.
+          <br />
+          For clinical reference only. Individual outcomes may vary.
+        </p>
+      </div>
     </div>
   );
 }
