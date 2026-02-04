@@ -45,6 +45,7 @@ export interface ValidationInputs {
     pericardium: boolean;
     main_bronchus: boolean;
     diaphragm: boolean;
+    hilar_fat: boolean; // Direct extension into hilar fat/soft tissue forces pT2a
   };
   // Golden Rule: Atelectasis/Pneumonitis
   atelectasis: {
@@ -103,6 +104,11 @@ export interface MarginAlert {
   message: string;
 }
 
+export interface SubmissionAlert {
+  type: 'AIS' | 'MIA';
+  message: string;
+}
+
 export interface ParsedReport {
   inputs: ValidationInputs;
   extractedText: {
@@ -124,6 +130,7 @@ export interface ParsedReport {
   marginAlerts: MarginAlert[];
   multiplePrimaryTumors: boolean;
   invasiveSizeMissing: boolean;
+  submissionAlerts: SubmissionAlert[];
 }
 
 // ============================================
@@ -635,6 +642,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
       pericardium: false,
       main_bronchus: false,
       diaphragm: false,
+      hilar_fat: false,
     },
     atelectasis: {
       has_total_lung_atelectasis: false,
@@ -996,6 +1004,17 @@ export function parsePathologyReport(reportText: string): ParsedReport {
       ],
       keywords: ['diaphragm invasion', 'diaphragm']
     },
+    hilar_fat: {
+      patterns: [
+        /direct\s*extension\s*(into|to)\s*(the\s*)?hilar\s*(fat|soft\s*tissue)/i,
+        /invad(es?|ing|ed)\s*(the\s*)?hilar\s*(fat|soft\s*tissue)/i,
+        /hilar\s*(fat|soft\s*tissue)\s*invasion/i,
+        /extends?\s*(into|to|through)\s*(the\s*)?hilar\s*(fat|soft\s*tissue)/i,
+        /infiltrat(es?|ing|ed)\s*(the\s*)?hilar\s*(fat|soft\s*tissue)/i,
+        /tumor\s*(extends?|invades?)\s*(into\s*)?(the\s*)?hilar\s*(fat|soft\s*tissue)/i,
+      ],
+      keywords: ['hilar fat', 'hilar soft tissue', 'direct extension into hilar']
+    },
   };
 
   for (const [key, config] of Object.entries(directInvasionPatterns)) {
@@ -1189,6 +1208,23 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     inputs.measurements_cm.invasive_size_cm === null &&
     inputs.measurements_cm.percent_invasive_0_to_100 === null;
 
+  // ============================================
+  // SUBMISSION ALERTS - AIS (pTis) and MIA (pT1mi) require entire lesion submission
+  // ============================================
+  const submissionAlerts: SubmissionAlert[] = [];
+  if (inputs.histology.is_AIS) {
+    submissionAlerts.push({
+      type: 'AIS',
+      message: '⚠️ SUBMISSION REQUIREMENT: Diagnosis of adenocarcinoma in situ (AIS/pTis) requires the lesion to be entirely submitted for histologic examination. Partial sampling cannot exclude invasive foci.'
+    });
+  }
+  if (inputs.histology.is_MIA) {
+    submissionAlerts.push({
+      type: 'MIA',
+      message: '⚠️ SUBMISSION REQUIREMENT: Diagnosis of minimally invasive adenocarcinoma (MIA/pT1mi) requires the lesion to be entirely submitted for histologic examination. Partial sampling cannot exclude larger invasive foci.'
+    });
+  }
+
   return { 
     inputs, 
     extractedText, 
@@ -1203,6 +1239,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     marginAlerts,
     multiplePrimaryTumors,
     invasiveSizeMissing,
+    submissionAlerts,
   };
 }
 
@@ -1276,6 +1313,7 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
   if (inputs.direct_invasion.pericardium) findings.push('pericardium', 'parietal pericardium');
   if (inputs.direct_invasion.diaphragm) findings.push('diaphragm');
   if (inputs.direct_invasion.main_bronchus) findings.push('main bronchus');
+  if (inputs.direct_invasion.hilar_fat) findings.push('hilar fat', 'hilar soft tissue', 'direct extension into hilar');
 
   // Detect multiple primary tumors for (m) suffix
   const hasMultiplePrimaries = detectMultiplePrimaryTumors(rawText);

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert } from '@/lib/validationLogic';
+import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert, SubmissionAlert } from '@/lib/validationLogic';
 
 interface ValidationResultProps {
   comparison: {
@@ -362,6 +362,23 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
             <p className="text-sm text-foreground">
               The report indicates multiple primary tumors. Per AJCC standards, the "(m)" suffix has been appended to the T-category (e.g., pT1b(m)).
             </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Submission Alert - AIS (pTis) and MIA (pT1mi) require entire lesion submission */}
+      {parsedReport.submissionAlerts?.length > 0 && (
+        <Alert className="border-2 border-amber-500/50 bg-amber-500/10">
+          <FileText className="h-5 w-5 text-amber-500" />
+          <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold">
+            ⚠️ Submission Requirement Alert
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-2">
+            {parsedReport.submissionAlerts.map((alert, index) => (
+              <div key={index} className="p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                <p className="text-xs sm:text-sm text-foreground">{alert.message}</p>
+              </div>
+            ))}
           </AlertDescription>
         </Alert>
       )}
