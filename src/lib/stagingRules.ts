@@ -116,7 +116,7 @@ export const METASTASIS_RULES: MetastasisRule[] = [
   {
     stage: "pM1a",
     criteria: "Separate tumor nodule in contralateral lobe, pleural or pericardial nodules, or malignant pleural/pericardial effusion",
-    keywords: ["contralateral lobe nodule", "pleural effusion", "pericardial effusion", "malignant effusion", "pleural nodule", "pericardial nodule", "pleural metastasis"]
+    keywords: ["contralateral lobe nodule", "contralateral lung nodule", "contralateral lobe", "opposite lung nodule", "pleural effusion", "pericardial effusion", "malignant effusion", "pleural nodule", "pericardial nodule", "pleural metastasis"]
   },
   {
     stage: "pM1b",
@@ -247,7 +247,7 @@ export const STAGING_RULES: StagingRulesDatabase = {
     },
     {
       stage: "pT2a",
-      criteria: "Tumor size > 3.0 cm and <= 4.0 cm OR any size with visceral pleural invasion (PL1: beyond elastic layer, PL2: to pleural surface) OR direct extension into hilar fat/soft tissue",
+      criteria: "Tumor size > 3.0 cm and <= 4.0 cm OR any size with visceral pleural invasion (PL1: beyond elastic layer, PL2: to pleural surface) OR direct extension into hilar fat/hilar soft tissue",
       min_size_cm: 3.0,
       max_size_cm: 4.0,
       overrides: ["visceral pleural invasion", "PL1", "PL2", "hilar fat", "hilar soft tissue", "direct extension into hilar"],
@@ -262,17 +262,17 @@ export const STAGING_RULES: StagingRulesDatabase = {
     },
     {
       stage: "pT3",
-      criteria: "Tumor size > 5.0 cm and <= 7.0 cm OR direct invasion of chest wall, phrenic nerve, or parietal pericardium",
+      criteria: "Tumor size > 5.0 cm and <= 7.0 cm OR direct invasion of chest wall, phrenic nerve, parietal pericardium, OR parietal pleura (PL3) OR separate tumor nodule in same lobe",
       min_size_cm: 5.0,
       max_size_cm: 7.0,
-      overrides: ["chest wall", "phrenic nerve", "parietal pericardium"],
+      overrides: ["chest wall", "phrenic nerve", "parietal pericardium", "parietal pleura", "PL3", "same lobe nodule"],
       priority: 4
     },
     {
       stage: "pT4",
-      criteria: "Tumor size > 7.0 cm OR invasion of diaphragm, heart, great vessels, trachea, or carina",
+      criteria: "Tumor size > 7.0 cm OR invasion of diaphragm, mediastinum, heart, great vessels, trachea, carina, esophagus, vertebral body, or recurrent laryngeal nerve OR separate tumor nodule in different ipsilateral lobe",
       min_size_cm: 7.0,
-      overrides: ["diaphragm", "heart", "great vessels", "trachea", "carina"],
+      overrides: ["diaphragm", "mediastinum", "heart", "great vessels", "trachea", "carina", "esophagus", "vertebral body", "recurrent laryngeal nerve", "ipsilateral lobe nodule"],
       priority: 3
     }
   ],
