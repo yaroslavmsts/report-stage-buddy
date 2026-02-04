@@ -1,6 +1,13 @@
 // AJCC 8th Edition - Lung Cancer pT Staging Rules
 // This is the Source of Truth for all staging calculations
 
+export interface GoldenRule {
+  id: string;
+  name: string;
+  description: string;
+  priority: number; // Lower = higher priority (checked first)
+}
+
 export interface StagingRule {
   stage: string;
   criteria: string;
@@ -13,13 +20,37 @@ export interface StagingRule {
 export interface StagingRulesDatabase {
   staging_system: string;
   source: string;
+  golden_rules: GoldenRule[];
   rules: StagingRule[];
 }
+
+// Golden Rules - these take precedence in staging decisions
+export const GOLDEN_RULES: GoldenRule[] = [
+  {
+    id: "invasion_trump_card",
+    name: "The Invasion Trump Card",
+    description: "Visceral pleural invasion (PL1/PL2) automatically makes a tumor pT2a, even if the size is only 0.2 cm.",
+    priority: 1
+  },
+  {
+    id: "total_vs_invasive",
+    name: "Total vs. Invasive Size",
+    description: "For T1 stages, if a report provides both \"Total Size\" and \"Invasive Size,\" the Invasive Size is used for staging.",
+    priority: 2
+  },
+  {
+    id: "atelectasis_pneumonitis",
+    name: "Atelectasis/Pneumonitis",
+    description: "If a tumor of any size causes collapse of the entire lung (total atelectasis/pneumonitis), it is automatically pT2.",
+    priority: 3
+  }
+];
 
 // Source of Truth JSON for AJCC 8th Edition Lung Cancer pT Staging
 export const STAGING_RULES: StagingRulesDatabase = {
   staging_system: "AJCC 8th Edition - Lung Cancer (pT)",
   source: "AJCC 8th Edition Logic JSON",
+  golden_rules: GOLDEN_RULES,
   rules: [
     {
       stage: "pTis",

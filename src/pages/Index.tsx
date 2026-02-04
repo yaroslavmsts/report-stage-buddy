@@ -4,8 +4,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ValidationResult } from '@/components/ValidationResult';
 import { parsePathologyReport, runValidation, compareStages, getStagingSource } from '@/lib/validationLogic';
-import { STAGING_RULES } from '@/lib/stagingRules';
-import { Loader2, FileText, Shield, AlertTriangle, Database } from 'lucide-react';
+import { STAGING_RULES, GOLDEN_RULES } from '@/lib/stagingRules';
+import { Loader2, FileText, Shield, AlertTriangle, Database, Zap } from 'lucide-react';
 
 const SAMPLE_REPORT = `PATHOLOGY REPORT
 
@@ -137,6 +137,26 @@ const Index = () => {
                       Clear
                     </Button>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Golden Rules Card */}
+            <Card className="border-destructive/30 bg-destructive/5">
+              <CardContent className="pt-6">
+                <div className="flex gap-3">
+                  <Zap className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-bold text-destructive mb-2">⚡ Golden Rules</p>
+                    <ul className="space-y-2">
+                      {GOLDEN_RULES.map((rule) => (
+                        <li key={rule.id} className="border-l-2 border-destructive/50 pl-3">
+                          <p className="font-semibold text-foreground">{rule.name}</p>
+                          <p className="text-muted-foreground text-xs">{rule.description}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
               </CardContent>
             </Card>
