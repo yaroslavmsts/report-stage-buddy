@@ -109,6 +109,16 @@ export interface SubmissionAlert {
   message: string;
 }
 
+export interface IpsilateralLobeInfo {
+  primaryLobe: string | null;
+  noduleLobe: string | null;
+  primaryLung: 'Right' | 'Left' | null;
+  noduleLung: 'Right' | 'Left' | null;
+  isDifferentLobesSameLung: boolean;
+  forcesT4: boolean;
+  message: string | null;
+}
+
 export interface ParsedReport {
   inputs: ValidationInputs;
   extractedText: {
@@ -131,6 +141,7 @@ export interface ParsedReport {
   multiplePrimaryTumors: boolean;
   invasiveSizeMissing: boolean;
   submissionAlerts: SubmissionAlert[];
+  ipsilateralLobeInfo: IpsilateralLobeInfo;
 }
 
 // ============================================
@@ -585,6 +596,133 @@ export function detectMarginStatus(reportText: string): MarginAlert[] {
   }
   
   return alerts;
+}
+
+/**
+ * LOBE-TO-LUNG MAPPING for Ipsilateral Nodule Detection
+ * RUL, RML, RLL = Right Lung; LUL, LLL = Left Lung
+ */
+const LOBE_TO_LUNG_MAP: Record<string, 'Right' | 'Left'> = {
+  'rul': 'Right',
+  'rml': 'Right', 
+  'rll': 'Right',
+  'right upper lobe': 'Right',
+  'right middle lobe': 'Right',
+  'right lower lobe': 'Right',
+  'lul': 'Left',
+  'lll': 'Left',
+  'left upper lobe': 'Left',
+  'left lower lobe': 'Left',
+};
+
+const LOBE_ABBREVIATIONS: Record<string, string> = {
+  'rul': 'RUL',
+  'rml': 'RML',
+  'rll': 'RLL',
+  'right upper lobe': 'RUL',
+  'right middle lobe': 'RML',
+  'right lower lobe': 'RLL',
+  'lul': 'LUL',
+  'lll': 'LLL',
+  'left upper lobe': 'LUL',
+  'left lower lobe': 'LLL',
+};
+
+/**
+ * Detects ipsilateral lobe nodules (different lobes, same lung)
+ * Per AJCC 8th Edition: Separate tumor nodule in a different ipsilateral lobe = pT4
+ */
+export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLobeInfo {
+  const text = reportText.toLowerCase();
+  
+  const defaultResult: IpsilateralLobeInfo = {
+    primaryLobe: null,
+    noduleLobe: null,
+    primaryLung: null,
+    noduleLung: null,
+    isDifferentLobesSameLung: false,
+    forcesT4: false,
+    message: null,
+  };
+
+  // Patterns to detect primary tumor location
+  const primaryPatterns = [
+    /(?:primary\s*)?(?:tumor|mass|carcinoma|adenocarcinoma)\s*(?:in|of|involving|located\s*in|arising\s*from|within)\s*(?:the\s*)?(rul|rml|rll|lul|lll|right\s*upper\s*lobe|right\s*middle\s*lobe|right\s*lower\s*lobe|left\s*upper\s*lobe|left\s*lower\s*lobe)/gi,
+    /(rul|rml|rll|lul|lll|right\s*upper\s*lobe|right\s*middle\s*lobe|right\s*lower\s*lobe|left\s*upper\s*lobe|left\s*lower\s*lobe)\s*(?:tumor|mass|carcinoma|adenocarcinoma|primary)/gi,
+    /specimen\s*(?:from|of)\s*(?:the\s*)?(rul|rml|rll|lul|lll|right\s*upper\s*lobe|right\s*middle\s*lobe|right\s*lower\s*lobe|left\s*upper\s*lobe|left\s*lower\s*lobe)/gi,
+    /lobectomy[,:\s]*(rul|rml|rll|lul|lll|right\s*upper\s*lobe|right\s*middle\s*lobe|right\s*lower\s*lobe|left\s*upper\s*lobe|left\s*lower\s*lobe)/gi,
+    /(rul|rml|rll|lul|lll|right\s*upper\s*lobe|right\s*middle\s*lobe|right\s*lower\s*lobe|left\s*upper\s*lobe|left\s*lower\s*lobe)\s*lobectomy/gi,
+  ];
+
+  // Patterns to detect separate nodule in different lobe
+  const nodulePatterns = [
+    /(?:separate|additional|satellite|secondary)\s*(?:tumor\s*)?(?:nodule|mass|lesion)\s*(?:in|within|involving)\s*(?:the\s*)?(rul|rml|rll|lul|lll|right\s*upper\s*lobe|right\s*middle\s*lobe|right\s*lower\s*lobe|left\s*upper\s*lobe|left\s*lower\s*lobe)/gi,
+    /(?:nodule|mass|lesion)\s*(?:in|within)\s*(?:a\s*)?(?:different|another|separate)\s*(?:ipsilateral\s*)?lobe[,:\s]*(rul|rml|rll|lul|lll|right\s*upper\s*lobe|right\s*middle\s*lobe|right\s*lower\s*lobe|left\s*upper\s*lobe|left\s*lower\s*lobe)?/gi,
+    /(?:ipsilateral|same\s*lung)\s*(?:separate\s*)?(?:nodule|tumor|mass|lesion)\s*(?:in\s*)?(rul|rml|rll|lul|lll|right\s*upper\s*lobe|right\s*middle\s*lobe|right\s*lower\s*lobe|left\s*upper\s*lobe|left\s*lower\s*lobe)?/gi,
+    /different\s*ipsilateral\s*lobe/gi,
+    /separate\s*(?:tumor\s*)?nodule\s*(?:is\s*)?(?:present|identified|noted)\s*(?:in|within)\s*(?:the\s*)?(rul|rml|rll|lul|lll|right\s*upper\s*lobe|right\s*middle\s*lobe|right\s*lower\s*lobe|left\s*upper\s*lobe|left\s*lower\s*lobe)/gi,
+  ];
+
+  let primaryLobe: string | null = null;
+  let noduleLobe: string | null = null;
+
+  // Find primary tumor lobe
+  for (const pattern of primaryPatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const lobe = match[1]?.toLowerCase().trim();
+      if (lobe && LOBE_TO_LUNG_MAP[lobe]) {
+        primaryLobe = lobe;
+        break;
+      }
+    }
+    if (primaryLobe) break;
+  }
+
+  // Find separate nodule lobe
+  for (const pattern of nodulePatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      // Check if pattern detected "different ipsilateral lobe" phrase
+      if (match[0].includes('different ipsilateral lobe')) {
+        // This explicitly states different lobe same lung
+        if (primaryLobe) {
+          defaultResult.primaryLobe = LOBE_ABBREVIATIONS[primaryLobe] || primaryLobe.toUpperCase();
+          defaultResult.primaryLung = LOBE_TO_LUNG_MAP[primaryLobe];
+          defaultResult.isDifferentLobesSameLung = true;
+          defaultResult.forcesT4 = true;
+          defaultResult.message = `⚠️ pT4 OVERRIDE: Separate tumor nodule in a different ipsilateral lobe detected. Per AJCC 8th Edition, this automatically assigns pT4 staging regardless of tumor size.`;
+          return defaultResult;
+        }
+      }
+      
+      const lobe = match[1]?.toLowerCase().trim();
+      if (lobe && LOBE_TO_LUNG_MAP[lobe]) {
+        noduleLobe = lobe;
+        break;
+      }
+    }
+    if (noduleLobe) break;
+  }
+
+  // If we have both lobes, check if they're in the same lung but different lobes
+  if (primaryLobe && noduleLobe) {
+    const primaryLung = LOBE_TO_LUNG_MAP[primaryLobe];
+    const noduleLung = LOBE_TO_LUNG_MAP[noduleLobe];
+    
+    defaultResult.primaryLobe = LOBE_ABBREVIATIONS[primaryLobe] || primaryLobe.toUpperCase();
+    defaultResult.noduleLobe = LOBE_ABBREVIATIONS[noduleLobe] || noduleLobe.toUpperCase();
+    defaultResult.primaryLung = primaryLung;
+    defaultResult.noduleLung = noduleLung;
+    
+    if (primaryLung === noduleLung && primaryLobe !== noduleLobe) {
+      defaultResult.isDifferentLobesSameLung = true;
+      defaultResult.forcesT4 = true;
+      defaultResult.message = `⚠️ pT4 OVERRIDE: Primary tumor in ${defaultResult.primaryLobe} with separate nodule in ${defaultResult.noduleLobe} (same lung, different lobe). Per AJCC 8th Edition, separate tumor nodule in a different ipsilateral lobe automatically assigns pT4 staging.`;
+    }
+  }
+
+  return defaultResult;
 }
 
 /**
@@ -1225,6 +1363,11 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     });
   }
 
+  // ============================================
+  // IPSILATERAL LOBE NODULE DETECTION - Different lobe same lung = pT4
+  // ============================================
+  const ipsilateralLobeInfo = detectIpsilateralLobeNodules(reportText);
+
   return { 
     inputs, 
     extractedText, 
@@ -1240,6 +1383,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     multiplePrimaryTumors,
     invasiveSizeMissing,
     submissionAlerts,
+    ipsilateralLobeInfo,
   };
 }
 
@@ -1415,6 +1559,19 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
     );
   }
 
+  // IPSILATERAL LOBE NODULE OVERRIDE: Separate nodule in different lobe of same lung = pT4
+  // Per AJCC 8th Edition: A separate tumor nodule in a different ipsilateral lobe is pT4
+  const ipsilateralLobeInfo = detectIpsilateralLobeNodules(rawText);
+  if (!hasConflict && ipsilateralLobeInfo.forcesT4) {
+    return buildResult(
+      'applicable',
+      'pT4',
+      'ipsilateral_lobe_override',
+      undefined,
+      ipsilateralLobeInfo.message || `⚠️ IPSILATERAL LOBE OVERRIDE: Separate tumor nodule in different lobe of same lung detected. Per AJCC 8th Edition, this automatically assigns pT4 staging.`
+    );
+  }
+
   // STEP 2: Check OVERRIDE rules in priority order (before size-based staging)
   // GOLDEN RULE #1: The Invasion Trump Card - visceral pleural invasion (PL1/PL2) → pT2a
   // This ensures findings like visceral pleural invasion take precedence
@@ -1539,7 +1696,8 @@ function buildAutoCalculateReasoning(
 export function compareStages(
   reportedStage: string | null,
   calculatedResult: ValidationResult,
-  inputs: ValidationInputs
+  inputs: ValidationInputs,
+  rawText: string = ''
 ): {
   isMatch: boolean;
   isAutoCalculated: boolean;
@@ -1548,6 +1706,7 @@ export function compareStages(
   isPleuralInvasionMismatch?: boolean;
   clinicalNote?: string;
   isLepidicMismatch?: boolean;
+  isIpsilateralLobeMismatch?: boolean;
 } {
   // Auto-calculate mode: No reported stage found
   if (!reportedStage) {
@@ -1615,6 +1774,33 @@ export function compareStages(
       message: 'Validation Failure: Staging Mismatch Detected',
       details: `According to AJCC 8th Edition/CAP Lung Protocol, visceral pleural invasion automatically upgrades the pT category. • Tumor Size: ${tumorSize !== null ? tumorSize + ' cm' : 'Not specified'}. • Pleural Status: ${plStatus} (visceral pleural invasion present). • Logic: Any tumor with visceral pleural invasion (${plStatus}) must be classified as pT2a or higher, regardless of tumor size, making the reported ${reportedStage} clinically inconsistent.`,
       isPleuralInvasionMismatch: true,
+    };
+  }
+
+  // Special check: Ipsilateral lobe nodules present but reported as T1 or T2
+  // Per AJCC 8th Edition: Separate tumor nodule in a different ipsilateral lobe = pT4
+  const ipsilateralLobeInfo = detectIpsilateralLobeNodules(rawText);
+  if (
+    ipsilateralLobeInfo.isDifferentLobesSameLung &&
+    (normalizedReported.startsWith('PT1') || normalizedReported.startsWith('PT2'))
+  ) {
+    return {
+      isMatch: false,
+      isAutoCalculated: false,
+      message: 'Validation Failure: Ipsilateral Lobe Mismatch',
+      details: `According to AJCC 8th Edition, a separate tumor nodule in a different lobe of the SAME lung (ipsilateral) automatically assigns pT4 staging.
+
+**Detected Findings:**
+• Primary Tumor: ${ipsilateralLobeInfo.primaryLobe} (${ipsilateralLobeInfo.primaryLung} Lung)
+• Separate Nodule: ${ipsilateralLobeInfo.noduleLobe || 'detected'} (${ipsilateralLobeInfo.noduleLung || 'same'} Lung)
+
+**AJCC Rule:** Different lobe, same lung = pT4
+
+**Reported Stage:** ${reportedStage}
+**Correct Stage:** pT4
+
+**Conclusion:** The reported ${reportedStage} is inconsistent with the presence of ipsilateral lobe nodules. This should be staged as pT4.`,
+      isIpsilateralLobeMismatch: true,
     };
   }
 
