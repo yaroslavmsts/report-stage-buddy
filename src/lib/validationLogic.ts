@@ -11,8 +11,10 @@ import {
   getMetastasisStage,
   getStageGroup,
   getICD10Code,
+  getSurvivalData,
   type StagingRule,
-  type ICD10Code
+  type ICD10Code,
+  type SurvivalData
 } from './stagingRules';
 
 export { getStagingSource };
@@ -57,6 +59,7 @@ export interface ValidationResult {
   n_category: string | null;
   m_category: string | null;
   stage_group: string | null;
+  survival: SurvivalData | null;
   icd10: ICD10Code | null;
   basis?: string;
   size_basis_cm?: number | null;
@@ -562,12 +565,15 @@ export function runValidation(inputs: ValidationInputs, rawText: string = ''): V
       ? getStageGroup(t_category, n_category, m_category)
       : null;
     
+    const survival = stage_group ? getSurvivalData(stage_group) : null;
+    
     return {
       applicability,
       t_category,
       n_category,
       m_category,
       stage_group,
+      survival,
       icd10: icd10Result,
       basis,
       size_basis_cm: size_basis_cm_val ?? undefined,

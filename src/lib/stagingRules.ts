@@ -43,6 +43,11 @@ export interface ICD10Code {
   keywords: string[];
 }
 
+export interface SurvivalData {
+  stage: string;
+  five_year_survival: string;
+}
+
 export interface StagingRulesDatabase {
   staging_system: string;
   source: string;
@@ -52,6 +57,7 @@ export interface StagingRulesDatabase {
   metastasis_rules: MetastasisRule[];
   stage_groups: StageGroup[];
   icd10_codes: ICD10Code[];
+  survival_data: SurvivalData[];
 }
 
 // Golden Rules - these take precedence in staging decisions
@@ -273,7 +279,8 @@ export const STAGING_RULES: StagingRulesDatabase = {
   node_rules: NODE_RULES,
   metastasis_rules: METASTASIS_RULES,
   stage_groups: STAGE_GROUPS,
-  icd10_codes: ICD10_CODES
+  icd10_codes: ICD10_CODES,
+  survival_data: [] // Populated after SURVIVAL_DATA is defined
 };
 
 // Get the staging system source label
@@ -416,4 +423,24 @@ export function getICD10Code(text: string): ICD10Code {
   
   // Return unspecified as fallback
   return ICD10_CODES.find(c => c.code === 'C34.9')!;
+}
+
+// 5-Year Survival Data by Pathologic Stage (AJCC 8th Edition)
+export const SURVIVAL_DATA: SurvivalData[] = [
+  { stage: "Stage IA1", five_year_survival: "90%" },
+  { stage: "Stage IA2", five_year_survival: "85%" },
+  { stage: "Stage IA3", five_year_survival: "80%" },
+  { stage: "Stage IB", five_year_survival: "73%" },
+  { stage: "Stage IIA", five_year_survival: "65%" },
+  { stage: "Stage IIB", five_year_survival: "56%" },
+  { stage: "Stage IIIA", five_year_survival: "41%" },
+  { stage: "Stage IIIB", five_year_survival: "24%" },
+  { stage: "Stage IIIC", five_year_survival: "12%" },
+  { stage: "Stage IVA", five_year_survival: "10%" },
+  { stage: "Stage IVB", five_year_survival: "< 1%" }
+];
+
+// Get 5-year survival rate for a stage group
+export function getSurvivalData(stageGroup: string): SurvivalData | null {
+  return SURVIVAL_DATA.find(s => s.stage === stageGroup) || null;
 }

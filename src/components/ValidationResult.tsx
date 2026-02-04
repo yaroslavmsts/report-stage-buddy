@@ -1,4 +1,4 @@
-import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, MapPin } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, MapPin, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ValidationResult as ValidationResultType, ParsedReport } from '@/lib/validationLogic';
 
@@ -95,7 +95,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
       {calculatedResult.stage_group && (
         <Card className="border-2 border-primary/30 bg-primary/5">
           <CardContent className="pt-4 sm:pt-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
               <div className="flex items-center gap-3">
                 <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
                 <div>
@@ -103,16 +103,27 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
                   <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-primary">{calculatedResult.stage_group}</p>
                 </div>
               </div>
-              {calculatedResult.icd10 && (
-                <div className="text-right">
-                  <div className="flex items-center gap-1.5 justify-end">
-                    <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                    <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">ICD-10</p>
+              <div className="flex items-center gap-4 sm:gap-6">
+                {calculatedResult.survival && (
+                  <div className="text-left sm:text-center">
+                    <div className="flex items-center gap-1.5">
+                      <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-success" />
+                      <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">5-Year Survival</p>
+                    </div>
+                    <p className="text-lg sm:text-xl font-bold text-success">{calculatedResult.survival.five_year_survival}</p>
                   </div>
-                  <p className="text-lg sm:text-xl font-bold text-foreground">{calculatedResult.icd10.code}</p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">{calculatedResult.icd10.site}</p>
-                </div>
-              )}
+                )}
+                {calculatedResult.icd10 && (
+                  <div className="text-left sm:text-right">
+                    <div className="flex items-center gap-1.5 sm:justify-end">
+                      <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                      <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">ICD-10</p>
+                    </div>
+                    <p className="text-lg sm:text-xl font-bold text-foreground">{calculatedResult.icd10.code}</p>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">{calculatedResult.icd10.site}</p>
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
