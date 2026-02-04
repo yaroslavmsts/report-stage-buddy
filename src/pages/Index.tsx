@@ -217,8 +217,8 @@ The tumor measures 2.3 cm and demonstrates solid growth pattern. The pleural inv
 NOTE: This example demonstrates CONFLICT DETECTION - sentences contain both invasion keywords AND negation keywords in close proximity, triggering the safety layer for manual verification.`
   },
   ipsilateralLobe: {
-    name: "🫁 Ipsilateral Lobe Nodule",
-    description: "Different lobe, same lung → pT4 (not pT1c or pM1a)",
+    name: "🫁 Ipsilateral Different Lobe (pT4)",
+    description: "Different lobe, same lung → pT4",
     report: `PATHOLOGY REPORT
 
 DIAGNOSIS: Right upper lobe lobectomy with additional nodule resection - Invasive adenocarcinoma
@@ -245,9 +245,123 @@ PATHOLOGIC STAGE: pT1c pN0
 MICROSCOPIC DESCRIPTION:
 The primary tumor in the RUL measures 2.1 cm with acinar growth pattern. A separate 0.8 cm tumor nodule is present in the RLL (different ipsilateral lobe). Both lesions show identical morphology consistent with intrapulmonary spread from a single primary.
 
-Per AJCC 8th Edition: A separate tumor nodule in a different lobe of the SAME lung (ipsilateral) is classified as pT4 - NOT pT1c (as might be suggested by size) and NOT pM1a (which applies to CONTRALATERAL lobe nodules).
+Per AJCC 8th Edition: A separate tumor nodule in a different lobe of the SAME lung (ipsilateral) is classified as pT4.
 
-NOTE: This example demonstrates the Ipsilateral Lobe Rule - the reported pT1c is incorrect because the separate nodule in RLL (same lung, different lobe) mandates pT4 staging.`
+LOBE MAP: Right Lung = RUL, RML, RLL | Left Lung = LUL, LLL
+
+NOTE: The reported pT1c is INCORRECT - the separate nodule in RLL (same lung, different lobe) mandates pT4 staging.`
+  },
+  sameLobeNodule: {
+    name: "🫁 Same Lobe Nodule (pT3)",
+    description: "Satellite nodule in same lobe → pT3",
+    report: `PATHOLOGY REPORT
+
+DIAGNOSIS: Right upper lobe lobectomy - Invasive adenocarcinoma with satellite nodule
+
+PRIMARY TUMOR:
+- Location: Right upper lobe (RUL)
+- Tumor size: 1.5 cm in greatest dimension
+- Histologic type: Invasive adenocarcinoma, acinar predominant
+
+SATELLITE NODULE:
+- A satellite nodule was identified in the same lobe (RUL), measuring 0.4 cm
+- Histologically identical to the primary tumor
+
+VISCERAL PLEURAL INVASION: Absent
+
+MARGINS: Negative
+
+LYMPH NODES: Hilar lymph nodes negative (0/3)
+
+PATHOLOGIC STAGE: pT1b pN0
+
+MICROSCOPIC DESCRIPTION:
+The primary tumor measures 1.5 cm. A satellite nodule is present in the same lobe. Per AJCC 8th Edition: A separate tumor nodule in the SAME lobe = pT3.
+
+NOTE: The reported pT1b is INCORRECT - the same-lobe satellite nodule mandates pT3 staging.`
+  },
+  contralateralNodule: {
+    name: "🫁 Contralateral Nodule (pM1a)",
+    description: "Nodule in opposite lung → pM1a (Stage IVA)",
+    report: `PATHOLOGY REPORT
+
+DIAGNOSIS: Left upper lobe lobectomy with contralateral nodule - Invasive adenocarcinoma
+
+PRIMARY TUMOR:
+- Location: Left upper lobe (LUL)
+- Tumor size: 2.0 cm in greatest dimension
+- Histologic type: Invasive adenocarcinoma
+
+CONTRALATERAL NODULE:
+- A separate nodule was identified in the contralateral lung (right lung)
+- Histologically consistent with the primary tumor
+
+VISCERAL PLEURAL INVASION: Absent
+
+MARGINS: Negative
+
+LYMPH NODES: Negative (0/4)
+
+PATHOLOGIC STAGE: pT1c pN0
+
+MICROSCOPIC DESCRIPTION:
+Primary tumor in LUL with a separate tumor nodule in the opposite lung. Per AJCC 8th Edition: Contralateral lung nodule = pM1a (Stage IVA).
+
+LOBE MAP: Right Lung = RUL, RML, RLL | Left Lung = LUL, LLL
+
+NOTE: The presence of a contralateral lung nodule mandates pM1a classification (Stage IVA).`
+  },
+  hilarFatInvasion: {
+    name: "🔬 Hilar Fat Invasion (pT2a)",
+    description: "Direct extension into hilar fat → minimum pT2a",
+    report: `PATHOLOGY REPORT
+
+DIAGNOSIS: Right middle lobe lobectomy - Invasive adenocarcinoma
+
+TUMOR SIZE: 0.9 cm in greatest dimension
+
+HISTOLOGIC TYPE: Invasive adenocarcinoma, solid predominant
+
+DIRECT INVASION: Tumor shows direct extension into the hilar soft tissue
+
+VISCERAL PLEURAL INVASION: Absent (PL0)
+
+MARGINS: Negative
+
+LYMPH NODES: Negative (0/5)
+
+PATHOLOGIC STAGE: pT1a pN0
+
+MICROSCOPIC DESCRIPTION:
+Despite the small tumor size (0.9 cm), there is direct extension of the tumor into the hilar fat/soft tissue. Per AJCC 8th Edition, direct invasion into hilar fat automatically assigns minimum pT2a regardless of tumor size.
+
+NOTE: The reported pT1a is INCORRECT - hilar fat invasion mandates minimum pT2a staging.`
+  },
+  pT3PhrenicNerve: {
+    name: "🔬 Phrenic Nerve Invasion (pT3)",
+    description: "Phrenic nerve or parietal pleura (PL3) → pT3",
+    report: `PATHOLOGY REPORT
+
+DIAGNOSIS: Left lower lobe lobectomy - Invasive squamous cell carcinoma
+
+TUMOR SIZE: 1.8 cm in greatest dimension
+
+HISTOLOGIC TYPE: Invasive squamous cell carcinoma, moderately differentiated
+
+DIRECT INVASION: Tumor invades the phrenic nerve
+
+VISCERAL PLEURAL INVASION: PL3 (invades parietal pleura)
+
+MARGINS: Negative
+
+LYMPH NODES: Negative (0/4)
+
+PATHOLOGIC STAGE: pT1b pN0
+
+MICROSCOPIC DESCRIPTION:
+The tumor shows invasion of the phrenic nerve and parietal pleura (PL3). Per AJCC 8th Edition, invasion of phrenic nerve or parietal pleura (PL3) automatically assigns pT3 staging regardless of tumor size.
+
+NOTE: The reported pT1b is INCORRECT - phrenic nerve/PL3 invasion mandates pT3 staging.`
   }
 };
 
