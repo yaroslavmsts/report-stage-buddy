@@ -190,12 +190,15 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   }
 
   // Extract invasive size - also more flexible
+  // GOLDEN RULE #2: Invasive size takes precedence over total size
   const invasiveSizePatterns = [
-    /invasive\s*(component|size|focus|portion)[:\s]+(\d+\.?\d*)\s*cm/i,
+    /invasive\s*size[:\s]+(\d+\.?\d*)\s*cm/i,  // "Invasive Size: 0.8 cm"
+    /invasive\s*(component|focus|portion)[:\s]+(\d+\.?\d*)\s*cm/i,
     /invasive\s*tumor[:\s]+(\d+\.?\d*)\s*cm/i,
     /invasion[:\s]+(\d+\.?\d*)\s*cm/i,
     /(\d+\.?\d*)\s*cm\s+invasive/i,
     /invasive[:\s]+(\d+\.?\d*)\s*cm/i,
+    /size\s*of\s*invasive\s*(component)?[:\s]+(\d+\.?\d*)\s*cm/i,
   ];
 
   for (const pattern of invasiveSizePatterns) {
@@ -246,6 +249,18 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   }
 
   // Check for pleural invasion (PL1, PL2, or visceral pleural invasion)
+  // IMPORTANT: Must exclude negative contexts like "no visceral pleural invasion"
+  const negativePatterns = [
+    /no\s+(visceral\s*)?pleural\s*invasion/i,
+    /without\s+(visceral\s*)?pleural\s*invasion/i,
+    /pleural\s*invasion\s*(is\s*)?(not|absent|negative)/i,
+    /negative\s+for\s+(visceral\s*)?pleural\s*invasion/i,
+    /no\s+evidence\s+of\s+(visceral\s*)?pleural\s*invasion/i,
+    /(visceral\s*)?pleural\s*invasion\s*(is\s*)?not\s*(present|identified|seen)/i,
+  ];
+  
+  const hasNegativePleuralContext = negativePatterns.some(pattern => pattern.test(text));
+  
   const pleuralPatterns = [
     /\bpl1\b/i,
     /\bpl2\b/i,
@@ -256,25 +271,28 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     /pleural\s*invasion\s*(present|identified|seen)/i,
   ];
 
-  for (const pattern of pleuralPatterns) {
-    if (pattern.test(text)) {
-      inputs.pleural_invasion.has_visceral_pleural_invasion = true;
-      
-      // Determine PL status
-      if (/\bpl1\b/i.test(text)) {
-        inputs.pleural_invasion.pl_status = 'PL1';
-        extractedText.histologyFindings.push('Pleural invasion: PL1 (extends beyond elastic layer)');
-      } else if (/\bpl2\b/i.test(text)) {
-        inputs.pleural_invasion.pl_status = 'PL2';
-        extractedText.histologyFindings.push('Pleural invasion: PL2 (extends to pleural surface)');
-      } else if (/\bpl3\b/i.test(text)) {
-        inputs.pleural_invasion.pl_status = 'PL3';
-        extractedText.histologyFindings.push('Pleural invasion: PL3 (invades parietal pleura)');
-      } else {
-        inputs.pleural_invasion.pl_status = 'PL1'; // Default to PL1 if not specified
-        extractedText.histologyFindings.push('Visceral pleural invasion present');
+  // Only detect pleural invasion if NOT in a negative context
+  if (!hasNegativePleuralContext) {
+    for (const pattern of pleuralPatterns) {
+      if (pattern.test(text)) {
+        inputs.pleural_invasion.has_visceral_pleural_invasion = true;
+        
+        // Determine PL status
+        if (/\bpl1\b/i.test(text)) {
+          inputs.pleural_invasion.pl_status = 'PL1';
+          extractedText.histologyFindings.push('Pleural invasion: PL1 (extends beyond elastic layer)');
+        } else if (/\bpl2\b/i.test(text)) {
+          inputs.pleural_invasion.pl_status = 'PL2';
+          extractedText.histologyFindings.push('Pleural invasion: PL2 (extends to pleural surface)');
+        } else if (/\bpl3\b/i.test(text)) {
+          inputs.pleural_invasion.pl_status = 'PL3';
+          extractedText.histologyFindings.push('Pleural invasion: PL3 (invades parietal pleura)');
+        } else {
+          inputs.pleural_invasion.pl_status = 'PL1'; // Default to PL1 if not specified
+          extractedText.histologyFindings.push('Visceral pleural invasion present');
+        }
+        break;
       }
-      break;
     }
   }
 
