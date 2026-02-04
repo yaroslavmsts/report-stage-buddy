@@ -42,7 +42,7 @@ const Index = () => {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     const parsedReport = parsePathologyReport(reportText);
-    const calculatedResult = runValidation(parsedReport.inputs);
+    const calculatedResult = runValidation(parsedReport.inputs, parsedReport.rawText);
     const comparison = compareStages(parsedReport.reportedStage, calculatedResult, parsedReport.inputs);
 
     setValidationResult({

@@ -1,4 +1,4 @@
-import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, MapPin } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ValidationResult as ValidationResultType, ParsedReport } from '@/lib/validationLogic';
 
@@ -91,18 +91,68 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
         </CardContent>
       </Card>
 
-      {/* Details Card */}
+      {/* AJCC Prognostic Group Card */}
+      {calculatedResult.stage_group && (
+        <Card className="border-2 border-primary/30 bg-primary/5">
+          <CardContent className="pt-4 sm:pt-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                <div>
+                  <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">AJCC Prognostic Group</p>
+                  <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-primary">{calculatedResult.stage_group}</p>
+                </div>
+              </div>
+              {calculatedResult.icd10 && (
+                <div className="text-right">
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                    <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">ICD-10</p>
+                  </div>
+                  <p className="text-lg sm:text-xl font-bold text-foreground">{calculatedResult.icd10.code}</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">{calculatedResult.icd10.site}</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* TNM Summary Card */}
       <Card>
         <CardHeader className="pb-2 sm:pb-3">
           <CardTitle className="text-base sm:text-lg flex items-center gap-2">
             <Info className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
-            Validation Details
+            TNM Staging Details
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 sm:space-y-4">
-          <div className="grid grid-cols-2 gap-2 sm:gap-4">
+          {/* TNM Grid */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className={`p-2 sm:p-4 rounded-lg ${isAutoCalculated ? 'bg-primary/10 border border-primary/20' : 'bg-muted'}`}>
+              <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-0.5 sm:mb-1 text-center">pT (Tumor)</p>
+              <p className={`text-lg sm:text-xl lg:text-2xl font-bold text-center ${isAutoCalculated ? 'text-primary' : ''}`}>
+                {hasCalculatedStage ? calculatedResult.t_category : 'N/A'}
+              </p>
+            </div>
             <div className="p-2 sm:p-4 bg-muted rounded-lg">
-              <p className="text-[10px] sm:text-sm font-medium text-muted-foreground mb-0.5 sm:mb-1">Reported Stage</p>
+              <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-0.5 sm:mb-1 text-center">pN (Nodes)</p>
+              <p className="text-lg sm:text-xl lg:text-2xl font-bold text-center">
+                {calculatedResult.n_category || 'N/A'}
+              </p>
+            </div>
+            <div className="p-2 sm:p-4 bg-muted rounded-lg">
+              <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-0.5 sm:mb-1 text-center">pM (Metastasis)</p>
+              <p className="text-lg sm:text-xl lg:text-2xl font-bold text-center">
+                {calculatedResult.m_category || 'N/A'}
+              </p>
+            </div>
+          </div>
+
+          {/* Reported vs Calculated comparison */}
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 border-t pt-3 sm:pt-4">
+            <div className="p-2 sm:p-4 bg-muted rounded-lg">
+              <p className="text-[10px] sm:text-sm font-medium text-muted-foreground mb-0.5 sm:mb-1">Reported pT Stage</p>
               <p className="text-base sm:text-lg lg:text-xl font-semibold truncate">
                 {parsedReport.reportedStage || (
                   <span className="text-muted-foreground italic text-xs sm:text-sm">Not found</span>
@@ -218,9 +268,53 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
               </div>
             )}
 
+            {parsedReport.extractedText.lymphNodeFindings.length > 0 && (
+              <div>
+                <p className="text-[10px] sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">Lymph Node Status</p>
+                <ul className="space-y-0.5 sm:space-y-1">
+                  {parsedReport.extractedText.lymphNodeFindings.map((finding, i) => (
+                    <li key={i} className="text-xs sm:text-sm flex items-start gap-1.5 sm:gap-2">
+                      <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary flex-shrink-0 mt-1.5" />
+                      <span className="break-words">{finding}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {parsedReport.extractedText.metastasisFindings.length > 0 && (
+              <div>
+                <p className="text-[10px] sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">Metastasis Status</p>
+                <ul className="space-y-0.5 sm:space-y-1">
+                  {parsedReport.extractedText.metastasisFindings.map((finding, i) => (
+                    <li key={i} className="text-xs sm:text-sm flex items-start gap-1.5 sm:gap-2">
+                      <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary flex-shrink-0 mt-1.5" />
+                      <span className="break-words">{finding}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {parsedReport.extractedText.siteFindings.length > 0 && (
+              <div>
+                <p className="text-[10px] sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">Tumor Site</p>
+                <ul className="space-y-0.5 sm:space-y-1">
+                  {parsedReport.extractedText.siteFindings.map((finding, i) => (
+                    <li key={i} className="text-xs sm:text-sm flex items-start gap-1.5 sm:gap-2">
+                      <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary flex-shrink-0 mt-1.5" />
+                      <span className="break-words">{finding}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {parsedReport.extractedText.histologyFindings.length === 0 &&
               parsedReport.extractedText.measurementFindings.length === 0 &&
-              parsedReport.extractedText.stageFindings.length === 0 && (
+              parsedReport.extractedText.stageFindings.length === 0 &&
+              parsedReport.extractedText.lymphNodeFindings.length === 0 &&
+              parsedReport.extractedText.metastasisFindings.length === 0 && (
                 <p className="text-xs sm:text-sm text-muted-foreground">
                   No specific findings were extracted from the report.
                 </p>
