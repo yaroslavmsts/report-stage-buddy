@@ -1,6 +1,7 @@
-import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, DollarSign, Heart, FileText, AlertTriangle } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, DollarSign, Heart, FileText, AlertTriangle, HelpCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo } from '@/lib/validationLogic';
 
 interface ValidationResultProps {
@@ -131,8 +132,25 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
       {hasConflict && parsedReport.conflicts.length > 0 && (
         <Alert className="border-2 border-amber-500/50 bg-amber-500/10">
           <AlertTriangle className="h-5 w-5 text-amber-500" />
-          <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold">
+          <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-2">
             Linguistic Conflict Detected
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-amber-500/70 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs p-3">
+                  <div className="space-y-2 text-xs">
+                    <p className="font-semibold text-foreground">Conflict Detection vs Negation Handling</p>
+                    <div className="space-y-1.5">
+                      <p><span className="font-medium text-success">✓ Negation Handling:</span> Recognizes clear negative statements like "No invasion" or "Pleura intact" and correctly excludes invasion from staging.</p>
+                      <p><span className="font-medium text-amber-500">⚠ Conflict Detection:</span> Flags ambiguous sentences where invasion AND negation keywords appear within 10 words, suggesting contradictory or equivocal language that requires manual review.</p>
+                    </div>
+                    <p className="text-muted-foreground italic">Example conflict: "No definitive invasion but tumor cells present at pleural surface"</p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </AlertTitle>
           <AlertDescription className="mt-2 space-y-3">
             <p className="text-sm text-foreground">

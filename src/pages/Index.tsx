@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ValidationResult } from '@/components/ValidationResult';
 import { parsePathologyReport, runValidation, compareStages, getStagingSource } from '@/lib/validationLogic';
 import { STAGING_RULES, GOLDEN_RULES } from '@/lib/stagingRules';
-import { Loader2, FileText, Shield, AlertTriangle, Database, Zap, ChevronDown } from 'lucide-react';
+import { Loader2, FileText, Shield, AlertTriangle, Database, Zap, ChevronDown, HelpCircle } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -372,7 +373,26 @@ const Index = () => {
                           </div>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuLabel>🔍 Safety Logic Layer</DropdownMenuLabel>
+                        <DropdownMenuLabel className="flex items-center gap-2">
+                          🔍 Safety Logic Layer
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-xs p-3">
+                                <div className="space-y-2 text-xs">
+                                  <p className="font-semibold text-foreground">Safety Logic Layer</p>
+                                  <div className="space-y-1.5">
+                                    <p><span className="font-medium text-success">✓ Negation Handling:</span> Properly interprets clear negative statements ("No invasion", "Pleura intact") → Uses size-based staging only.</p>
+                                    <p><span className="font-medium text-amber-500">⚠ Conflict Detection:</span> Flags ambiguous sentences where invasion + negation keywords appear within 10 words → Triggers manual review warning.</p>
+                                  </div>
+                                  <p className="text-muted-foreground">Both features prevent false-positive invasion staging from misinterpreted language.</p>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </DropdownMenuLabel>
                         <DropdownMenuItem onClick={() => handleLoadSample('negationExample')}>
                           <div>
                             <p className="font-medium">{SAMPLE_REPORTS.negationExample.name}</p>
