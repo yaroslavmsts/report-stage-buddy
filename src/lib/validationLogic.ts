@@ -20,6 +20,13 @@ export interface ValidationInputs {
     has_visceral_pleural_invasion: boolean;
     pl_status: 'PL0' | 'PL1' | 'PL2' | 'PL3' | null;
   };
+  direct_invasion: {
+    chest_wall: boolean;
+    phrenic_nerve: boolean;
+    pericardium: boolean;
+    main_bronchus: boolean;
+    diaphragm: boolean;
+  };
 }
 
 export interface ValidationResult {
@@ -64,6 +71,13 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     pleural_invasion: {
       has_visceral_pleural_invasion: false,
       pl_status: null,
+    },
+    direct_invasion: {
+      chest_wall: false,
+      phrenic_nerve: false,
+      pericardium: false,
+      main_bronchus: false,
+      diaphragm: false,
     },
   };
 
@@ -243,12 +257,54 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     }
   }
 
-  // Extract reported stage from the report
+  // Check for direct invasion patterns (pT3 criteria)
+  const directInvasionPatterns = {
+    chest_wall: [
+      /invad(es?|ing|ed)\s*(the\s*)?chest\s*wall/i,
+      /chest\s*wall\s*invasion/i,
+      /direct\s*invasion\s*(of|into)\s*(the\s*)?chest\s*wall/i,
+      /extends?\s*(into|to)\s*(the\s*)?chest\s*wall/i,
+    ],
+    phrenic_nerve: [
+      /invad(es?|ing|ed)\s*(the\s*)?phrenic\s*nerve/i,
+      /phrenic\s*nerve\s*invasion/i,
+      /phrenic\s*nerve\s*involvement/i,
+    ],
+    pericardium: [
+      /invad(es?|ing|ed)\s*(the\s*)?pericardium/i,
+      /pericardial\s*invasion/i,
+      /direct\s*invasion\s*(of|into)\s*(the\s*)?pericardium/i,
+      /extends?\s*(into|to)\s*(the\s*)?pericardium/i,
+    ],
+    main_bronchus: [
+      /invad(es?|ing|ed)\s*(the\s*)?main\s*bronchus/i,
+      /main\s*bronchus\s*invasion/i,
+      /main\s*bronchus\s*involvement/i,
+    ],
+    diaphragm: [
+      /invad(es?|ing|ed)\s*(the\s*)?diaphragm/i,
+      /diaphragm(atic)?\s*invasion/i,
+      /extends?\s*(into|to)\s*(the\s*)?diaphragm/i,
+    ],
+  };
+
+  for (const [key, patterns] of Object.entries(directInvasionPatterns)) {
+    for (const pattern of patterns) {
+      if (pattern.test(text)) {
+        inputs.direct_invasion[key as keyof typeof inputs.direct_invasion] = true;
+        const displayName = key.replace(/_/g, ' ');
+        extractedText.histologyFindings.push(`Direct invasion: ${displayName}`);
+        break;
+      }
+    }
+  }
+
+  // Extract reported stage from the report - expanded to include all pT stages
   let reportedStage: string | null = null;
   const stagePatterns = [
     /pathologic\s*stage[:\s]*(pt\d+[a-z]*)/i,
     /pt\s*stage[:\s]*(pt\d+[a-z]*)/i,
-    /(pt1a|pt1b|pt1c|pt1mi|pt2a|pt2b|ptis)/i,
+    /(pt1a|pt1b|pt1c|pt1mi|pt2a|pt2b|pt3|pt4|ptis)/i,
     /primary\s*tumor[:\s]*(pt\d+[a-z]*)/i,
     /\bpt:\s*(pt\d+[a-z]*)/i,
   ];
@@ -322,16 +378,38 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
     };
   }
 
-  // PL3 indicates parietal pleural invasion - higher stage
+  // PL3 indicates parietal pleural invasion - pT3 or higher
   if (
     inputs.pleural_invasion.has_visceral_pleural_invasion &&
     inputs.pleural_invasion.pl_status === 'PL3'
   ) {
     return {
-      applicability: 'outside_scope',
-      t_category: null,
+      applicability: 'applicable',
+      t_category: 'pT3',
       basis: 'pleural_invasion',
-      reason: 'PL3 indicates invasion of parietal pleura, which requires evaluation for pT3 or higher staging.',
+      reason: 'PL3 indicates invasion of parietal pleura, which is classified as pT3.',
+    };
+  }
+
+  // Check for direct invasion patterns (pT3 criteria)
+  const hasDirectInvasion = 
+    inputs.direct_invasion.chest_wall ||
+    inputs.direct_invasion.phrenic_nerve ||
+    inputs.direct_invasion.pericardium ||
+    inputs.direct_invasion.diaphragm;
+  
+  if (hasDirectInvasion) {
+    const invadedStructures: string[] = [];
+    if (inputs.direct_invasion.chest_wall) invadedStructures.push('chest wall');
+    if (inputs.direct_invasion.phrenic_nerve) invadedStructures.push('phrenic nerve');
+    if (inputs.direct_invasion.pericardium) invadedStructures.push('pericardium');
+    if (inputs.direct_invasion.diaphragm) invadedStructures.push('diaphragm');
+    
+    return {
+      applicability: 'applicable',
+      t_category: 'pT3',
+      basis: 'direct_invasion',
+      reason: `Direct invasion into ${invadedStructures.join(', ')} is present. Per AJCC 8th edition, tumors with direct invasion of these structures are classified as pT3.`,
     };
   }
 
@@ -381,14 +459,68 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
     };
   }
 
-  // Outside scope
+  // Check T1c size (>2.0 to ≤3.0 cm)
+  if (size_basis_cm > 2.0 && size_basis_cm <= 3.0) {
+    return {
+      applicability: 'applicable',
+      t_category: 'pT1c',
+      basis: 'size_basis_cm',
+      size_basis_cm: size_basis_cm,
+      reason: 'Size basis > 2.0 cm and ≤ 3.0 cm.',
+    };
+  }
+
+  // Check T2a size (>3.0 to ≤4.0 cm) - note: visceral pleural invasion already handled above
+  if (size_basis_cm > 3.0 && size_basis_cm <= 4.0) {
+    return {
+      applicability: 'applicable',
+      t_category: 'pT2a',
+      basis: 'size_basis_cm',
+      size_basis_cm: size_basis_cm,
+      reason: 'Size basis > 3.0 cm and ≤ 4.0 cm.',
+    };
+  }
+
+  // Check T2b size (>4.0 to ≤5.0 cm)
+  if (size_basis_cm > 4.0 && size_basis_cm <= 5.0) {
+    return {
+      applicability: 'applicable',
+      t_category: 'pT2b',
+      basis: 'size_basis_cm',
+      size_basis_cm: size_basis_cm,
+      reason: 'Size basis > 4.0 cm and ≤ 5.0 cm.',
+    };
+  }
+
+  // Check T3 size (>5.0 to ≤7.0 cm)
+  if (size_basis_cm > 5.0 && size_basis_cm <= 7.0) {
+    return {
+      applicability: 'applicable',
+      t_category: 'pT3',
+      basis: 'size_basis_cm',
+      size_basis_cm: size_basis_cm,
+      reason: 'Size basis > 5.0 cm and ≤ 7.0 cm.',
+    };
+  }
+
+  // pT4: Tumor > 7.0 cm or invades specific structures
+  if (size_basis_cm > 7.0) {
+    return {
+      applicability: 'applicable',
+      t_category: 'pT4',
+      basis: 'size_basis_cm',
+      size_basis_cm: size_basis_cm,
+      reason: 'Size basis > 7.0 cm. Per AJCC 8th edition, tumors larger than 7.0 cm are classified as pT4.',
+    };
+  }
+
+  // Fallback - should not reach here given the logic above
   return {
     applicability: 'outside_scope',
     t_category: null,
     basis: 'size_basis_cm',
     size_basis_cm: size_basis_cm,
-    reason:
-      'Size basis falls outside pT1a (≤1.0 cm) and pT1b (>1.0–2.0 cm). Evaluate other pT categories (e.g., pT1c or higher).',
+    reason: 'Unable to determine pT category from the available information.',
   };
 }
 
@@ -412,6 +544,16 @@ function buildAutoCalculateReasoning(
     }
   } else {
     parts.push('no visceral pleural invasion');
+  }
+  
+  // Check for direct invasion
+  const directInvasions: string[] = [];
+  if (inputs.direct_invasion.chest_wall) directInvasions.push('chest wall');
+  if (inputs.direct_invasion.phrenic_nerve) directInvasions.push('phrenic nerve');
+  if (inputs.direct_invasion.pericardium) directInvasions.push('pericardium');
+  if (inputs.direct_invasion.diaphragm) directInvasions.push('diaphragm');
+  if (directInvasions.length > 0) {
+    parts.push(`direct invasion of ${directInvasions.join(', ')}`);
   }
   
   if (inputs.histology.is_AIS) {

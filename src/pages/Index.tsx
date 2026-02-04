@@ -147,10 +147,20 @@ const Index = () => {
                   <AlertTriangle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                   <div className="text-sm text-muted-foreground">
                     <p className="font-medium text-foreground mb-1">Validation Scope</p>
-                    <p>
-                      This tool validates pT1a vs pT1b staging for lung adenocarcinoma. It also identifies pTis(AIS) and pT1mi cases. 
-                      Size criteria: pT1a ≤1.0 cm, pT1b &gt;1.0–2.0 cm.
+                    <p className="mb-2">
+                      This tool validates T staging for lung adenocarcinoma according to AJCC 8th Edition criteria:
                     </p>
+                    <ul className="space-y-1 text-xs">
+                      <li><strong>pTis(AIS):</strong> Adenocarcinoma in situ</li>
+                      <li><strong>pT1mi:</strong> Minimally invasive adenocarcinoma</li>
+                      <li><strong>pT1a:</strong> ≤1.0 cm</li>
+                      <li><strong>pT1b:</strong> &gt;1.0–2.0 cm</li>
+                      <li><strong>pT1c:</strong> &gt;2.0–3.0 cm</li>
+                      <li><strong>pT2a:</strong> &gt;3.0–4.0 cm <em>or</em> visceral pleural invasion (PL1/PL2)</li>
+                      <li><strong>pT2b:</strong> &gt;4.0–5.0 cm</li>
+                      <li><strong>pT3:</strong> &gt;5.0–7.0 cm <em>or</em> invasion of chest wall, phrenic nerve, pericardium</li>
+                      <li><strong>pT4:</strong> &gt;7.0 cm</li>
+                    </ul>
                   </div>
                 </div>
               </CardContent>
