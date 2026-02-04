@@ -155,6 +155,36 @@ PATHOLOGIC STAGE: pT2a pN1 pM1a
 
 MICROSCOPIC DESCRIPTION:
 The primary tumor measures 1.8 cm with visceral pleural invasion. Pleural fluid cytology demonstrates malignant cells morphologically consistent with primary lung adenocarcinoma. Per AJCC 8th Edition, malignant pleural effusion is classified as M1a, resulting in Stage IVA disease.`
+  },
+  negationExample: {
+    name: "🔍 Negation Handling Example",
+    description: "Tests 'intact pleura' → defaults to size-based staging",
+    report: `PATHOLOGY REPORT
+
+DIAGNOSIS: Right upper lobe lobectomy - Invasive adenocarcinoma
+
+TUMOR SIZE: 1.5 cm in greatest dimension
+
+HISTOLOGIC TYPE: Invasive adenocarcinoma, acinar predominant
+
+VISCERAL PLEURA: Intact. No visceral pleural invasion identified.
+
+CHEST WALL: Not involved. No invasion of chest wall structures.
+
+PERICARDIUM: Negative for invasion.
+
+MARGINS: All surgical margins are negative for malignancy.
+
+LYMPH NODES: 
+- Hilar lymph nodes: Negative for metastatic carcinoma (0/4)
+- No mediastinal lymph node sampling performed
+
+PATHOLOGIC STAGE: pT1b pN0
+
+MICROSCOPIC DESCRIPTION:
+Sections reveal a 1.5 cm well-differentiated invasive adenocarcinoma with acinar pattern. The tumor is confined to the pulmonary parenchyma. The visceral pleura is intact with no evidence of invasion. Elastic stain confirms intact elastic layer (PL0). The chest wall and pericardium are not invaded. All lymph nodes examined are negative for metastatic disease.
+
+NOTE: This example demonstrates proper negation handling - despite mentions of pleura, chest wall, and pericardium, the negative phrasing ("intact", "no invasion", "negative for") ensures size-based staging is used correctly.`
   }
 };
 
@@ -309,6 +339,14 @@ const Index = () => {
                           <div>
                             <p className="font-medium">{SAMPLE_REPORTS.stageIV.name}</p>
                             <p className="text-xs text-muted-foreground">{SAMPLE_REPORTS.stageIV.description}</p>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel>🔍 Negation Handling</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => handleLoadSample('negationExample')}>
+                          <div>
+                            <p className="font-medium">{SAMPLE_REPORTS.negationExample.name}</p>
+                            <p className="text-xs text-muted-foreground">{SAMPLE_REPORTS.negationExample.description}</p>
                           </div>
                         </DropdownMenuItem>
                       </DropdownMenuContent>
