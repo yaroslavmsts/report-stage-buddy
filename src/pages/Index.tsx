@@ -42,7 +42,7 @@ const Index = () => {
 
     const parsedReport = parsePathologyReport(reportText);
     const calculatedResult = runValidation(parsedReport.inputs);
-    const comparison = compareStages(parsedReport.reportedStage, calculatedResult);
+    const comparison = compareStages(parsedReport.reportedStage, calculatedResult, parsedReport.inputs);
 
     setValidationResult({
       comparison,

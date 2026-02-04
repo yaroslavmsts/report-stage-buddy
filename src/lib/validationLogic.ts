@@ -16,6 +16,10 @@ export interface ValidationInputs {
     is_superficial_spreading_tumor: boolean;
     invasive_component_limited_to_bronchial_wall: boolean;
   };
+  pleural_invasion: {
+    has_visceral_pleural_invasion: boolean;
+    pl_status: 'PL0' | 'PL1' | 'PL2' | 'PL3' | null;
+  };
 }
 
 export interface ValidationResult {
@@ -56,6 +60,10 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     superficial_spreading: {
       is_superficial_spreading_tumor: false,
       invasive_component_limited_to_bronchial_wall: false,
+    },
+    pleural_invasion: {
+      has_visceral_pleural_invasion: false,
+      pl_status: null,
     },
   };
 
@@ -162,12 +170,45 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     extractedText.histologyFindings.push('Invasive component limited to bronchial wall');
   }
 
+  // Check for pleural invasion (PL1, PL2, or visceral pleural invasion)
+  const pleuralPatterns = [
+    /\bpl1\b/i,
+    /\bpl2\b/i,
+    /\bpl3\b/i,
+    /visceral\s*pleural\s*invasion/i,
+    /invades?\s*(the\s*)?visceral\s*pleura/i,
+    /invasion\s*(of|into)\s*(the\s*)?visceral\s*pleura/i,
+    /pleural\s*invasion\s*(present|identified|seen)/i,
+  ];
+
+  for (const pattern of pleuralPatterns) {
+    if (pattern.test(text)) {
+      inputs.pleural_invasion.has_visceral_pleural_invasion = true;
+      
+      // Determine PL status
+      if (/\bpl1\b/i.test(text)) {
+        inputs.pleural_invasion.pl_status = 'PL1';
+        extractedText.histologyFindings.push('Pleural invasion: PL1 (extends beyond elastic layer)');
+      } else if (/\bpl2\b/i.test(text)) {
+        inputs.pleural_invasion.pl_status = 'PL2';
+        extractedText.histologyFindings.push('Pleural invasion: PL2 (extends to pleural surface)');
+      } else if (/\bpl3\b/i.test(text)) {
+        inputs.pleural_invasion.pl_status = 'PL3';
+        extractedText.histologyFindings.push('Pleural invasion: PL3 (invades parietal pleura)');
+      } else {
+        inputs.pleural_invasion.pl_status = 'PL1'; // Default to PL1 if not specified
+        extractedText.histologyFindings.push('Visceral pleural invasion present');
+      }
+      break;
+    }
+  }
+
   // Extract reported stage from the report
   let reportedStage: string | null = null;
   const stagePatterns = [
     /pathologic\s*stage[:\s]*(pt\d+[a-z]*)/i,
     /pt\s*stage[:\s]*(pt\d+[a-z]*)/i,
-    /(pt1a|pt1b|pt1c|pt1mi|ptis)/i,
+    /(pt1a|pt1b|pt1c|pt1mi|pt2a|pt2b|ptis)/i,
     /primary\s*tumor[:\s]*(pt\d+[a-z]*)/i,
     /\bpt:\s*(pt\d+[a-z]*)/i,
   ];
@@ -224,6 +265,33 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
       applicability: 'not_applicable',
       t_category: 'pT1mi',
       reason: 'Minimally invasive adenocarcinoma is staged as pT1mi, not pT1a/pT1b.',
+    };
+  }
+
+  // PRIORITY: Check pleural invasion BEFORE size-based staging
+  // Visceral pleural invasion (PL1 or PL2) automatically upgrades to pT2a
+  if (
+    inputs.pleural_invasion.has_visceral_pleural_invasion &&
+    (inputs.pleural_invasion.pl_status === 'PL1' || inputs.pleural_invasion.pl_status === 'PL2')
+  ) {
+    return {
+      applicability: 'applicable',
+      t_category: 'pT2a',
+      basis: 'pleural_invasion',
+      reason: `Visceral pleural invasion (${inputs.pleural_invasion.pl_status}) is present. Per AJCC 8th edition, tumors with visceral pleural invasion are classified as pT2a regardless of tumor size.`,
+    };
+  }
+
+  // PL3 indicates parietal pleural invasion - higher stage
+  if (
+    inputs.pleural_invasion.has_visceral_pleural_invasion &&
+    inputs.pleural_invasion.pl_status === 'PL3'
+  ) {
+    return {
+      applicability: 'outside_scope',
+      t_category: null,
+      basis: 'pleural_invasion',
+      reason: 'PL3 indicates invasion of parietal pleura, which requires evaluation for pT3 or higher staging.',
     };
   }
 
@@ -287,11 +355,13 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
 // Compare reported stage with calculated stage
 export function compareStages(
   reportedStage: string | null,
-  calculatedResult: ValidationResult
+  calculatedResult: ValidationResult,
+  inputs: ValidationInputs
 ): {
   isMatch: boolean;
   message: string;
   details: string;
+  isPleuralInvasionMismatch?: boolean;
 } {
   if (!reportedStage) {
     return {
@@ -311,6 +381,20 @@ export function compareStages(
 
   const normalizedReported = reportedStage.toUpperCase().replace(/\s/g, '');
   const normalizedCalculated = calculatedResult.t_category.toUpperCase().replace(/\s/g, '');
+
+  // Special check: Pleural invasion present but reported as pT1a or pT1b
+  if (
+    inputs.pleural_invasion.has_visceral_pleural_invasion &&
+    (inputs.pleural_invasion.pl_status === 'PL1' || inputs.pleural_invasion.pl_status === 'PL2') &&
+    (normalizedReported === 'PT1A' || normalizedReported === 'PT1B')
+  ) {
+    return {
+      isMatch: false,
+      message: 'INCONSISTENT: Pleural invasion requires pT2a',
+      details: `RED FLAG: Visceral pleural invasion (${inputs.pleural_invasion.pl_status}) is documented in the report, but the reported stage is ${reportedStage}. Per AJCC 8th edition staging criteria, any tumor with visceral pleural invasion (PL1 or PL2) must be classified as pT2a or higher, regardless of tumor size. The correct stage should be pT2a.`,
+      isPleuralInvasionMismatch: true,
+    };
+  }
 
   if (normalizedReported === normalizedCalculated) {
     return {
