@@ -3,8 +3,9 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ValidationResult } from '@/components/ValidationResult';
-import { parsePathologyReport, runValidation, compareStages } from '@/lib/validationLogic';
-import { Loader2, FileText, Shield, AlertTriangle } from 'lucide-react';
+import { parsePathologyReport, runValidation, compareStages, getStagingSource } from '@/lib/validationLogic';
+import { STAGING_RULES } from '@/lib/stagingRules';
+import { Loader2, FileText, Shield, AlertTriangle, Database } from 'lucide-react';
 
 const SAMPLE_REPORT = `PATHOLOGY REPORT
 
@@ -151,16 +152,16 @@ const Index = () => {
                       This tool validates T staging for lung adenocarcinoma according to AJCC 8th Edition criteria:
                     </p>
                     <ul className="space-y-1 text-xs">
-                      <li><strong>pTis(AIS):</strong> Adenocarcinoma in situ</li>
-                      <li><strong>pT1mi:</strong> Minimally invasive adenocarcinoma</li>
-                      <li><strong>pT1a:</strong> ≤1.0 cm</li>
-                      <li><strong>pT1b:</strong> &gt;1.0–2.0 cm</li>
-                      <li><strong>pT1c:</strong> &gt;2.0–3.0 cm</li>
-                      <li><strong>pT2a:</strong> &gt;3.0–4.0 cm <em>or</em> visceral pleural invasion (PL1/PL2)</li>
-                      <li><strong>pT2b:</strong> &gt;4.0–5.0 cm</li>
-                      <li><strong>pT3:</strong> &gt;5.0–7.0 cm <em>or</em> invasion of chest wall, phrenic nerve, pericardium</li>
-                      <li><strong>pT4:</strong> &gt;7.0 cm</li>
+                      {STAGING_RULES.rules.map((rule) => (
+                        <li key={rule.stage}>
+                          <strong>{rule.stage}:</strong> {rule.criteria}
+                        </li>
+                      ))}
                     </ul>
+                    <div className="mt-3 pt-2 border-t border-primary/20 flex items-center gap-2">
+                      <Database className="h-4 w-4 text-primary" />
+                      <span className="font-medium text-foreground">{getStagingSource()}</span>
+                    </div>
                   </div>
                 </div>
               </CardContent>
