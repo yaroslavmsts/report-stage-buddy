@@ -91,8 +91,8 @@ export const NODE_RULES: NodeRule[] = [
   },
   {
     stage: "pN1",
-    criteria: "Metastasis in ipsilateral peribronchial and/or ipsilateral hilar lymph nodes",
-    keywords: ["ipsilateral hilar", "peribronchial", "hilar lymph node metastasis", "n1 node", "level 10", "level 11", "level 12", "level 13", "level 14"]
+    criteria: "Metastasis in ipsilateral peribronchial and/or ipsilateral hilar lymph nodes, OR direct invasion of peribronchial/hilar lymph node by primary tumor",
+    keywords: ["ipsilateral hilar", "peribronchial", "hilar lymph node metastasis", "n1 node", "level 10", "level 11", "level 12", "level 13", "level 14", "direct invasion of lymph node", "directly invades lymph node", "tumor invades hilar lymph node", "tumor invades peribronchial lymph node", "direct extension into lymph node", "directly involves lymph node"]
   },
   {
     stage: "pN2",
@@ -247,10 +247,10 @@ export const STAGING_RULES: StagingRulesDatabase = {
     },
     {
       stage: "pT2a",
-      criteria: "Tumor size > 3.0 cm and <= 4.0 cm OR any size with visceral pleural invasion (PL1/PL2)",
+      criteria: "Tumor size > 3.0 cm and <= 4.0 cm OR any size with visceral pleural invasion (PL1: beyond elastic layer, PL2: to pleural surface) OR direct extension into hilar fat/soft tissue",
       min_size_cm: 3.0,
       max_size_cm: 4.0,
-      overrides: ["visceral pleural invasion", "PL1", "PL2"],
+      overrides: ["visceral pleural invasion", "PL1", "PL2", "hilar fat", "hilar soft tissue", "direct extension into hilar"],
       priority: 5
     },
     {
