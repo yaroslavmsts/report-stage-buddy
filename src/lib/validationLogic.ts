@@ -272,19 +272,107 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     extractedText.histologyFindings.push('Invasive component limited to bronchial wall');
   }
 
-  // Check for pleural invasion (PL1, PL2, or visceral pleural invasion)
-  // IMPORTANT: Must exclude negative contexts like "no visceral pleural invasion"
-  const negativePatterns = [
+  // ============================================
+  // NEGATION DETECTION UTILITY
+  // ============================================
+  // Check if a finding is negated within a certain word window
+  const negationWords = [
+    'no', 'not', 'without', 'absent', 'negative', 'intact', 'free', 
+    'none', 'denied', 'unremarkable', 'normal', 'preserved'
+  ];
+  
+  const negationPhrases = [
+    'not identified', 'not present', 'not seen', 'not detected', 'not noted',
+    'no evidence of', 'no sign of', 'no indication of',
+    'negative for', 'absent for', 'free of', 'free from',
+    'is intact', 'are intact', 'remains intact', 'remain intact',
+    'is absent', 'is negative', 'is unremarkable',
+    'does not invade', 'do not invade', 'did not invade',
+    'does not involve', 'do not involve', 'did not involve',
+    'does not extend', 'do not extend', 'did not extend',
+    'no invasion', 'without invasion', 'invasion absent',
+    'not invaded', 'uninvaded', 'non-invasive'
+  ];
+  
+  // Check if finding appears in a negated context
+  const isNegatedFinding = (finding: string, fullText: string): boolean => {
+    const normalizedText = fullText.toLowerCase();
+    const normalizedFinding = finding.toLowerCase();
+    
+    // First check for explicit negation phrases containing the finding
+    for (const phrase of negationPhrases) {
+      // Check if negation phrase appears near the finding (within ~50 chars before)
+      const findingIndex = normalizedText.indexOf(normalizedFinding);
+      if (findingIndex === -1) continue;
+      
+      // Look for negation phrase within window before the finding
+      const windowStart = Math.max(0, findingIndex - 60);
+      const windowText = normalizedText.substring(windowStart, findingIndex + normalizedFinding.length + 20);
+      
+      if (windowText.includes(phrase)) {
+        return true;
+      }
+    }
+    
+    // Check for simple negation word immediately preceding (within 3 words)
+    const words = normalizedText.split(/\s+/);
+    const findingWords = normalizedFinding.split(/\s+/);
+    const firstFindingWord = findingWords[0];
+    
+    for (let i = 0; i < words.length; i++) {
+      if (words[i].includes(firstFindingWord)) {
+        // Check previous 3 words for negation
+        for (let j = Math.max(0, i - 4); j < i; j++) {
+          if (negationWords.includes(words[j].replace(/[^a-z]/g, ''))) {
+            return true;
+          }
+        }
+        break;
+      }
+    }
+    
+    return false;
+  };
+
+  // ============================================
+  // PLEURAL INVASION DETECTION WITH NEGATION
+  // ============================================
+  const pleuralTerms = [
+    'visceral pleural invasion', 'visceral pleura invasion',
+    'pleural invasion', 'invades visceral pleura',
+    'invasion of visceral pleura', 'invasion into visceral pleura'
+  ];
+  
+  const plStatusTerms = ['pl1', 'pl2', 'pl3'];
+  
+  // Check for explicit negation patterns first
+  const explicitNegativePleuralPatterns = [
     /no\s+(visceral\s*)?pleural\s*invasion/i,
     /without\s+(visceral\s*)?pleural\s*invasion/i,
     /pleural\s*invasion\s*(is\s*)?(not|absent|negative)/i,
     /negative\s+for\s+(visceral\s*)?pleural\s*invasion/i,
     /no\s+evidence\s+of\s+(visceral\s*)?pleural\s*invasion/i,
     /(visceral\s*)?pleural\s*invasion\s*(is\s*)?not\s*(present|identified|seen)/i,
+    /(visceral\s*)?pleura[:\s]*(is\s*)?(intact|unremarkable|negative|normal)/i,
+    /pleura\s+is\s+intact/i,
+    /intact\s+(visceral\s*)?pleura/i,
+    /pl0\b/i, // PL0 means no invasion
   ];
   
-  const hasNegativePleuralContext = negativePatterns.some(pattern => pattern.test(text));
+  const hasNegativePleuralContext = explicitNegativePleuralPatterns.some(pattern => pattern.test(text));
   
+  // Also check using the generic negation detector
+  let isPleuralNegated = hasNegativePleuralContext;
+  if (!isPleuralNegated) {
+    for (const term of pleuralTerms) {
+      if (text.toLowerCase().includes(term) && isNegatedFinding(term, text)) {
+        isPleuralNegated = true;
+        break;
+      }
+    }
+  }
+  
+  // Positive pleural invasion patterns
   const pleuralPatterns = [
     /\bpl1\b/i,
     /\bpl2\b/i,
@@ -292,11 +380,12 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     /visceral\s*pleural\s*invasion/i,
     /invades?\s*(the\s*)?visceral\s*pleura/i,
     /invasion\s*(of|into)\s*(the\s*)?visceral\s*pleura/i,
-    /pleural\s*invasion\s*(present|identified|seen)/i,
+    /pleural\s*invasion\s*(present|identified|seen|positive)/i,
+    /positive\s*(for\s*)?(visceral\s*)?pleural\s*invasion/i,
   ];
 
   // Only detect pleural invasion if NOT in a negative context
-  if (!hasNegativePleuralContext) {
+  if (!isPleuralNegated) {
     for (const pattern of pleuralPatterns) {
       if (pattern.test(text)) {
         inputs.pleural_invasion.has_visceral_pleural_invasion = true;
@@ -318,47 +407,93 @@ export function parsePathologyReport(reportText: string): ParsedReport {
         break;
       }
     }
+  } else {
+    // Log that pleural invasion was detected as negative
+    if (pleuralPatterns.some(p => p.test(text)) || /pleura/i.test(text)) {
+      extractedText.histologyFindings.push('Visceral pleura: intact/negative for invasion');
+    }
   }
 
-  // Check for direct invasion patterns (pT3 criteria)
-  const directInvasionPatterns = {
-    chest_wall: [
-      /invad(es?|ing|ed)\s*(the\s*)?chest\s*wall/i,
-      /chest\s*wall\s*invasion/i,
-      /direct\s*invasion\s*(of|into)\s*(the\s*)?chest\s*wall/i,
-      /extends?\s*(into|to)\s*(the\s*)?chest\s*wall/i,
-    ],
-    phrenic_nerve: [
-      /invad(es?|ing|ed)\s*(the\s*)?phrenic\s*nerve/i,
-      /phrenic\s*nerve\s*invasion/i,
-      /phrenic\s*nerve\s*involvement/i,
-    ],
-    pericardium: [
-      /invad(es?|ing|ed)\s*(the\s*)?pericardium/i,
-      /pericardial\s*invasion/i,
-      /direct\s*invasion\s*(of|into)\s*(the\s*)?pericardium/i,
-      /extends?\s*(into|to)\s*(the\s*)?pericardium/i,
-    ],
-    main_bronchus: [
-      /invad(es?|ing|ed)\s*(the\s*)?main\s*bronchus/i,
-      /main\s*bronchus\s*invasion/i,
-      /main\s*bronchus\s*involvement/i,
-    ],
-    diaphragm: [
-      /invad(es?|ing|ed)\s*(the\s*)?diaphragm/i,
-      /diaphragm(atic)?\s*invasion/i,
-      /extends?\s*(into|to)\s*(the\s*)?diaphragm/i,
-    ],
+  // ============================================
+  // DIRECT INVASION DETECTION WITH NEGATION
+  // ============================================
+  const directInvasionPatterns: Record<string, { patterns: RegExp[], keywords: string[] }> = {
+    chest_wall: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?chest\s*wall/i,
+        /chest\s*wall\s*invasion/i,
+        /direct\s*invasion\s*(of|into)\s*(the\s*)?chest\s*wall/i,
+        /extends?\s*(into|to)\s*(the\s*)?chest\s*wall/i,
+      ],
+      keywords: ['chest wall invasion', 'chest wall']
+    },
+    phrenic_nerve: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?phrenic\s*nerve/i,
+        /phrenic\s*nerve\s*invasion/i,
+        /phrenic\s*nerve\s*involvement/i,
+      ],
+      keywords: ['phrenic nerve invasion', 'phrenic nerve']
+    },
+    pericardium: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?pericardium/i,
+        /pericardial\s*invasion/i,
+        /direct\s*invasion\s*(of|into)\s*(the\s*)?pericardium/i,
+        /extends?\s*(into|to)\s*(the\s*)?pericardium/i,
+      ],
+      keywords: ['pericardial invasion', 'pericardium']
+    },
+    main_bronchus: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?main\s*bronchus/i,
+        /main\s*bronchus\s*invasion/i,
+        /main\s*bronchus\s*involvement/i,
+      ],
+      keywords: ['main bronchus invasion', 'main bronchus']
+    },
+    diaphragm: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?diaphragm/i,
+        /diaphragm(atic)?\s*invasion/i,
+        /extends?\s*(into|to)\s*(the\s*)?diaphragm/i,
+      ],
+      keywords: ['diaphragm invasion', 'diaphragm']
+    },
   };
 
-  for (const [key, patterns] of Object.entries(directInvasionPatterns)) {
-    for (const pattern of patterns) {
+  for (const [key, config] of Object.entries(directInvasionPatterns)) {
+    let isPositive = false;
+    let matchedPattern = false;
+    
+    for (const pattern of config.patterns) {
       if (pattern.test(text)) {
-        inputs.direct_invasion[key as keyof typeof inputs.direct_invasion] = true;
-        const displayName = key.replace(/_/g, ' ');
-        extractedText.histologyFindings.push(`Direct invasion: ${displayName}`);
+        matchedPattern = true;
+        
+        // Check if this finding is negated
+        let isNegated = false;
+        for (const keyword of config.keywords) {
+          if (isNegatedFinding(keyword, text)) {
+            isNegated = true;
+            break;
+          }
+        }
+        
+        if (!isNegated) {
+          isPositive = true;
+        } else {
+          // Log the negated finding
+          const displayName = key.replace(/_/g, ' ');
+          extractedText.histologyFindings.push(`${displayName}: negative for invasion`);
+        }
         break;
       }
+    }
+    
+    if (isPositive) {
+      inputs.direct_invasion[key as keyof typeof inputs.direct_invasion] = true;
+      const displayName = key.replace(/_/g, ' ');
+      extractedText.histologyFindings.push(`Direct invasion: ${displayName}`);
     }
   }
 
