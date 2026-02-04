@@ -221,6 +221,8 @@ NOTE: This example demonstrates CONFLICT DETECTION - sentences contain both inva
 const Index = () => {
   const [reportText, setReportText] = useState('');
   const [isValidating, setIsValidating] = useState(false);
+  const [isOverridden, setIsOverridden] = useState(false);
+  const [overrideTimestamp, setOverrideTimestamp] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<{
     comparison: { isMatch: boolean; message: string; details: string };
     calculatedResult: ReturnType<typeof runValidation>;
@@ -231,6 +233,8 @@ const Index = () => {
     if (!reportText.trim()) return;
 
     setIsValidating(true);
+    setIsOverridden(false);
+    setOverrideTimestamp(null);
     
     // Simulate a brief processing delay for UX
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -249,14 +253,53 @@ const Index = () => {
     setIsValidating(false);
   };
 
+  const handleOverride = () => {
+    if (!validationResult) return;
+    
+    const timestamp = new Date().toLocaleString();
+    
+    // Re-run validation WITHOUT conflict restrictions (hasConflict = false)
+    const calculatedResult = runValidation(
+      validationResult.parsedReport.inputs, 
+      validationResult.parsedReport.rawText, 
+      false // Override: bypass conflict restrictions
+    );
+    
+    // Update comparison with override note in details
+    const comparison = compareStages(
+      validationResult.parsedReport.reportedStage, 
+      calculatedResult, 
+      validationResult.parsedReport.inputs
+    );
+    
+    // Append override note to the reasoning
+    const overrideNote = `\n\n⚠️ Manual override applied by user at ${timestamp}. AI safety protocols bypassed for this calculation.`;
+    
+    setValidationResult({
+      comparison: {
+        ...comparison,
+        details: comparison.details + overrideNote,
+      },
+      calculatedResult,
+      parsedReport: validationResult.parsedReport,
+    });
+    
+    setIsOverridden(true);
+    setOverrideTimestamp(timestamp);
+  };
+
   const handleLoadSample = (sampleKey: keyof typeof SAMPLE_REPORTS) => {
     setReportText(SAMPLE_REPORTS[sampleKey].report);
     setValidationResult(null);
+    setIsOverridden(false);
+    setOverrideTimestamp(null);
   };
 
   const handleClear = () => {
     setReportText('');
     setValidationResult(null);
+    setIsOverridden(false);
+    setOverrideTimestamp(null);
   };
 
   return (
@@ -476,6 +519,9 @@ const Index = () => {
                 comparison={validationResult.comparison}
                 calculatedResult={validationResult.calculatedResult}
                 parsedReport={validationResult.parsedReport}
+                onOverride={handleOverride}
+                isOverridden={isOverridden}
+                overrideTimestamp={overrideTimestamp || undefined}
               />
             ) : (
               <Card className="min-h-[200px] sm:min-h-[300px] lg:min-h-[400px] flex items-center justify-center border-dashed">
