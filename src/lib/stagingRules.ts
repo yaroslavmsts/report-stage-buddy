@@ -73,14 +73,14 @@ export const STAGING_RULES: StagingRulesDatabase = {
       criteria: "Tumor size > 5.0 cm and <= 7.0 cm OR direct invasion of chest wall, phrenic nerve, or parietal pericardium",
       min_size_cm: 5.0,
       max_size_cm: 7.0,
-      overrides: ["chest wall", "phrenic nerve", "parietal pericardium", "pericardium", "PL3"],
+      overrides: ["chest wall", "phrenic nerve", "parietal pericardium"],
       priority: 4
     },
     {
       stage: "pT4",
       criteria: "Tumor size > 7.0 cm OR invasion of diaphragm, heart, great vessels, trachea, or carina",
       min_size_cm: 7.0,
-      overrides: ["diaphragm", "heart", "great vessels", "trachea", "carina", "mediastinum", "recurrent laryngeal nerve", "esophagus", "vertebral body"],
+      overrides: ["diaphragm", "heart", "great vessels", "trachea", "carina"],
       priority: 3
     }
   ]
