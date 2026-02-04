@@ -67,36 +67,36 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Shield className="h-6 w-6 text-primary" />
+      <header className="border-b bg-card sticky top-0 z-10">
+        <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-primary/10">
+              <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-foreground">TNM Staging Validator</h1>
-              <p className="text-sm text-muted-foreground">CAP Lung Protocol 4.0.0.2 • AJCC 8th Edition</p>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-lg sm:text-xl font-bold text-foreground truncate">TNM Staging Validator</h1>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">CAP Lung 4.0.0.2 • AJCC 8th Edition</p>
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 lg:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
           {/* Input Section */}
           <div className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-primary" />
+              <CardHeader className="pb-2 sm:pb-4">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                   Pathology Report
                 </CardTitle>
-                <CardDescription>
-                  Paste the complete pathology report text below. The validator will extract histology, measurements, and staging information.
+                <CardDescription className="text-xs sm:text-sm">
+                  Paste the complete pathology report text below.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3 sm:space-y-4">
                 <Textarea
                   placeholder="Paste your pathology report here..."
                   value={reportText}
@@ -104,13 +104,14 @@ const Index = () => {
                     setReportText(e.target.value);
                     setValidationResult(null);
                   }}
-                  className="min-h-[400px] font-mono text-sm resize-none"
+                  className="min-h-[250px] sm:min-h-[300px] lg:min-h-[400px] font-mono text-xs sm:text-sm resize-none"
                 />
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                   <Button
                     onClick={handleValidate}
                     disabled={!reportText.trim() || isValidating}
-                    className="flex-1 sm:flex-none"
+                    className="w-full sm:w-auto sm:flex-1 lg:flex-none"
+                    size="default"
                   >
                     {isValidating ? (
                       <>
@@ -121,38 +122,42 @@ const Index = () => {
                       'Validate Staging'
                     )}
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleLoadSample}
-                    className="flex-1 sm:flex-none"
-                  >
-                    Load Sample
-                  </Button>
-                  {reportText && (
+                  <div className="flex gap-2 sm:gap-3">
                     <Button
-                      variant="ghost"
-                      onClick={handleClear}
+                      variant="outline"
+                      onClick={handleLoadSample}
                       className="flex-1 sm:flex-none"
+                      size="default"
                     >
-                      Clear
+                      Load Sample
                     </Button>
-                  )}
+                    {reportText && (
+                      <Button
+                        variant="ghost"
+                        onClick={handleClear}
+                        className="flex-1 sm:flex-none"
+                        size="default"
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Golden Rules Card */}
+            {/* Golden Rules Card - Collapsible on mobile */}
             <Card className="border-destructive/30 bg-destructive/5">
-              <CardContent className="pt-6">
-                <div className="flex gap-3">
-                  <Zap className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-                  <div className="text-sm">
+              <CardContent className="pt-4 sm:pt-6">
+                <div className="flex gap-2 sm:gap-3">
+                  <Zap className="h-4 w-4 sm:h-5 sm:w-5 text-destructive flex-shrink-0 mt-0.5" />
+                  <div className="text-xs sm:text-sm min-w-0 flex-1">
                     <p className="font-bold text-destructive mb-2">⚡ Golden Rules</p>
                     <ul className="space-y-2">
                       {GOLDEN_RULES.map((rule) => (
-                        <li key={rule.id} className="border-l-2 border-destructive/50 pl-3">
-                          <p className="font-semibold text-foreground">{rule.name}</p>
-                          <p className="text-muted-foreground text-xs">{rule.description}</p>
+                        <li key={rule.id} className="border-l-2 border-destructive/50 pl-2 sm:pl-3">
+                          <p className="font-semibold text-foreground text-xs sm:text-sm">{rule.name}</p>
+                          <p className="text-muted-foreground text-[10px] sm:text-xs leading-relaxed">{rule.description}</p>
                         </li>
                       ))}
                     </ul>
@@ -161,26 +166,26 @@ const Index = () => {
               </CardContent>
             </Card>
 
-            {/* Info Card */}
-            <Card className="border-primary/20 bg-primary/5">
-              <CardContent className="pt-6">
-                <div className="flex gap-3">
-                  <AlertTriangle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-muted-foreground">
+            {/* Info Card - Hidden on mobile, shown on tablet+ */}
+            <Card className="border-primary/20 bg-primary/5 hidden sm:block">
+              <CardContent className="pt-4 sm:pt-6">
+                <div className="flex gap-2 sm:gap-3">
+                  <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <div className="text-xs sm:text-sm text-muted-foreground min-w-0 flex-1">
                     <p className="font-medium text-foreground mb-1">Validation Scope</p>
-                    <p className="mb-2">
+                    <p className="mb-2 text-xs sm:text-sm">
                       This tool validates T staging for lung adenocarcinoma according to AJCC 8th Edition criteria:
                     </p>
-                    <ul className="space-y-1 text-xs">
+                    <ul className="space-y-1 text-[10px] sm:text-xs">
                       {STAGING_RULES.rules.map((rule) => (
-                        <li key={rule.stage}>
+                        <li key={rule.stage} className="break-words">
                           <strong>{rule.stage}:</strong> {rule.criteria}
                         </li>
                       ))}
                     </ul>
                     <div className="mt-3 pt-2 border-t border-primary/20 flex items-center gap-2">
-                      <Database className="h-4 w-4 text-primary" />
-                      <span className="font-medium text-foreground">{getStagingSource()}</span>
+                      <Database className="h-3 w-3 sm:h-4 sm:w-4 text-primary flex-shrink-0" />
+                      <span className="font-medium text-foreground text-xs sm:text-sm">{getStagingSource()}</span>
                     </div>
                   </div>
                 </div>
@@ -189,7 +194,7 @@ const Index = () => {
           </div>
 
           {/* Results Section */}
-          <div>
+          <div className="lg:sticky lg:top-20 lg:self-start">
             {validationResult ? (
               <ValidationResult
                 comparison={validationResult.comparison}
@@ -197,19 +202,25 @@ const Index = () => {
                 parsedReport={validationResult.parsedReport}
               />
             ) : (
-              <Card className="h-full min-h-[400px] flex items-center justify-center border-dashed">
+              <Card className="min-h-[200px] sm:min-h-[300px] lg:min-h-[400px] flex items-center justify-center border-dashed">
                 <CardContent>
-                  <div className="text-center text-muted-foreground">
-                    <Shield className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                    <p className="font-medium">No validation results yet</p>
-                    <p className="text-sm mt-1">
-                      Paste a pathology report and click "Validate Staging" to begin
+                  <div className="text-center text-muted-foreground px-4">
+                    <Shield className="h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 mx-auto mb-3 sm:mb-4 opacity-30" />
+                    <p className="font-medium text-sm sm:text-base">No validation results yet</p>
+                    <p className="text-xs sm:text-sm mt-1">
+                      Paste a pathology report and tap "Validate Staging"
                     </p>
                   </div>
                 </CardContent>
               </Card>
             )}
           </div>
+        </div>
+
+        {/* Mobile-only: Source footer */}
+        <div className="mt-4 text-center text-[10px] text-muted-foreground sm:hidden">
+          <Database className="h-3 w-3 inline-block mr-1" />
+          {getStagingSource()}
         </div>
       </main>
     </div>
