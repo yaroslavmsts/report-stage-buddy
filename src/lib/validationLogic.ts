@@ -684,12 +684,44 @@ export function compareStages(
     (inputs.pleural_invasion.pl_status === 'PL1' || inputs.pleural_invasion.pl_status === 'PL2') &&
     (normalizedReported === 'PT1A' || normalizedReported === 'PT1B')
   ) {
+    const tumorSize = inputs.measurements_cm.greatest_dimension_cm;
+    const plStatus = inputs.pleural_invasion.pl_status;
+    
     return {
       isMatch: false,
       isAutoCalculated: false,
-      message: 'INCONSISTENT: Pleural invasion requires pT2a',
-      details: `RED FLAG: Visceral pleural invasion (${inputs.pleural_invasion.pl_status}) is documented in the report, but the reported stage is ${reportedStage}. Per AJCC 8th edition staging criteria, any tumor with visceral pleural invasion (PL1 or PL2) must be classified as pT2a or higher, regardless of tumor size. The correct stage should be pT2a.`,
+      message: 'Validation Failure: Staging Mismatch Detected',
+      details: `According to AJCC 8th Edition/CAP Lung Protocol, visceral pleural invasion automatically upgrades the pT category. • Tumor Size: ${tumorSize !== null ? tumorSize + ' cm' : 'Not specified'}. • Pleural Status: ${plStatus} (visceral pleural invasion present). • Logic: Any tumor with visceral pleural invasion (${plStatus}) must be classified as pT2a or higher, regardless of tumor size, making the reported ${reportedStage} clinically inconsistent.`,
       isPleuralInvasionMismatch: true,
+    };
+  }
+
+  // Check for invasive size mismatch (Golden Rule #2)
+  if (
+    inputs.histology.is_invasive_nonmucinous_adenocarcinoma_with_lepidic_component &&
+    inputs.measurements_cm.invasive_size_cm !== null &&
+    inputs.measurements_cm.total_tumor_size_cm !== null &&
+    normalizedReported !== normalizedCalculated
+  ) {
+    const totalSize = inputs.measurements_cm.total_tumor_size_cm;
+    const invasiveSize = inputs.measurements_cm.invasive_size_cm;
+    const calculatedStage = calculatedResult.t_category;
+    
+    // Determine criteria text based on calculated stage
+    let criteriaText = '';
+    if (calculatedStage === 'pT1a') {
+      criteriaText = '≤1.0 cm';
+    } else if (calculatedStage === 'pT1b') {
+      criteriaText = '>1.0–2.0 cm';
+    } else if (calculatedStage === 'pT1c') {
+      criteriaText = '>2.0–3.0 cm';
+    }
+    
+    return {
+      isMatch: false,
+      isAutoCalculated: false,
+      message: 'Validation Failure: Staging Mismatch Detected',
+      details: `According to AJCC 8th Edition/CAP Lung Protocol, for nonmucinous adenocarcinomas with a lepidic component, only the invasive component size is used to assign the pT category. • Total Size: ${totalSize} cm (includes lepidic component). • Invasive Size: ${invasiveSize} cm. • Logic: An invasive component of ${invasiveSize} cm falls within the ${calculatedStage} criteria (${criteriaText}), making the reported ${reportedStage} clinically inconsistent.`,
     };
   }
 
@@ -697,15 +729,20 @@ export function compareStages(
     return {
       isMatch: true,
       isAutoCalculated: false,
-      message: 'Stage matches',
-      details: `Reported ${reportedStage} matches calculated ${calculatedResult.t_category}. ${calculatedResult.reason}`,
+      message: 'Validation Success: Stage Matches',
+      details: `According to AJCC 8th Edition/CAP Lung Protocol, the reported ${reportedStage} matches the calculated ${calculatedResult.t_category}. ${calculatedResult.reason}`,
     };
   }
 
+  // Generic mismatch
+  const tumorSize = inputs.measurements_cm.greatest_dimension_cm;
+  const invasiveSize = inputs.measurements_cm.invasive_size_cm;
+  const sizeUsed = invasiveSize !== null ? invasiveSize : tumorSize;
+  
   return {
     isMatch: false,
     isAutoCalculated: false,
-    message: 'Stage mismatch',
-    details: `Reported ${reportedStage} does not match calculated ${calculatedResult.t_category}. ${calculatedResult.reason}`,
+    message: 'Validation Failure: Staging Mismatch Detected',
+    details: `According to AJCC 8th Edition/CAP Lung Protocol, the reported stage does not match the calculated stage. • Tumor Size: ${tumorSize !== null ? tumorSize + ' cm' : 'Not specified'}${invasiveSize !== null ? ` • Invasive Size: ${invasiveSize} cm` : ''}. • Calculated Stage: ${calculatedResult.t_category}. • Logic: Based on the size of ${sizeUsed} cm, the correct stage should be ${calculatedResult.t_category}, making the reported ${reportedStage} clinically inconsistent.`,
   };
 }
