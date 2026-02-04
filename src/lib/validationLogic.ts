@@ -39,6 +39,11 @@ export interface ValidationInputs {
     main_bronchus: boolean;
     diaphragm: boolean;
   };
+  // Golden Rule: Atelectasis/Pneumonitis
+  atelectasis: {
+    has_total_lung_atelectasis: boolean;
+    has_total_lung_pneumonitis: boolean;
+  };
 }
 
 export interface ValidationResult {
@@ -90,6 +95,10 @@ export function parsePathologyReport(reportText: string): ParsedReport {
       pericardium: false,
       main_bronchus: false,
       diaphragm: false,
+    },
+    atelectasis: {
+      has_total_lung_atelectasis: false,
+      has_total_lung_pneumonitis: false,
     },
   };
 
@@ -311,6 +320,40 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     }
   }
 
+  // GOLDEN RULE: Detect total lung atelectasis/pneumonitis
+  const atelectasisPatterns = [
+    /total\s*(lung\s*)?(atelectasis|collapse)/i,
+    /complete\s*(lung\s*)?(atelectasis|collapse)/i,
+    /entire\s*lung\s*(atelectasis|collapse)/i,
+    /atelectasis\s*(of\s*)?(the\s*)?entire\s*lung/i,
+    /collapse\s*(of\s*)?(the\s*)?entire\s*lung/i,
+    /whole\s*lung\s*(atelectasis|collapse)/i,
+  ];
+  
+  const pneumonitisPatterns = [
+    /total\s*(lung\s*)?pneumonitis/i,
+    /complete\s*(lung\s*)?pneumonitis/i,
+    /entire\s*lung\s*pneumonitis/i,
+    /pneumonitis\s*(of\s*)?(the\s*)?entire\s*lung/i,
+    /obstructive\s*pneumonitis\s*(of\s*)?(the\s*)?(entire|whole)\s*lung/i,
+  ];
+  
+  for (const pattern of atelectasisPatterns) {
+    if (pattern.test(text)) {
+      inputs.atelectasis.has_total_lung_atelectasis = true;
+      extractedText.histologyFindings.push('⚠️ Golden Rule: Total lung atelectasis detected');
+      break;
+    }
+  }
+  
+  for (const pattern of pneumonitisPatterns) {
+    if (pattern.test(text)) {
+      inputs.atelectasis.has_total_lung_pneumonitis = true;
+      extractedText.histologyFindings.push('⚠️ Golden Rule: Total lung pneumonitis detected');
+      break;
+    }
+  }
+
   // Extract reported stage from the report - expanded to include all pT stages
   let reportedStage: string | null = null;
   const stagePatterns = [
@@ -350,10 +393,21 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
       inputs.measurements_cm.total_tumor_size_cm;
   }
 
+  // GOLDEN RULE #2: Total vs. Invasive Size
+  // If invasive size is available, use it for staging (even if total size is also provided)
   let size_basis_cm: number | null = null;
-  if (inputs.histology.is_invasive_nonmucinous_adenocarcinoma_with_lepidic_component) {
-    size_basis_cm = inputs.measurements_cm.invasive_size_cm ?? estimated_invasive_size_cm;
+  let usedInvasiveSize = false;
+  
+  if (inputs.measurements_cm.invasive_size_cm !== null) {
+    // Invasive size explicitly provided - use it (Golden Rule #2)
+    size_basis_cm = inputs.measurements_cm.invasive_size_cm;
+    usedInvasiveSize = true;
+  } else if (inputs.histology.is_invasive_nonmucinous_adenocarcinoma_with_lepidic_component && estimated_invasive_size_cm !== null) {
+    // Estimated invasive size from percentage
+    size_basis_cm = estimated_invasive_size_cm;
+    usedInvasiveSize = true;
   } else {
+    // Default to greatest dimension
     size_basis_cm = inputs.measurements_cm.greatest_dimension_cm;
   }
 
@@ -404,7 +458,20 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
     };
   }
 
+  // GOLDEN RULE #3: Atelectasis/Pneumonitis
+  // Total lung collapse automatically upgrades to pT2
+  if (inputs.atelectasis.has_total_lung_atelectasis || inputs.atelectasis.has_total_lung_pneumonitis) {
+    const condition = inputs.atelectasis.has_total_lung_atelectasis ? 'total lung atelectasis' : 'total lung pneumonitis';
+    return {
+      applicability: 'applicable',
+      t_category: 'pT2',
+      basis: 'golden_rule',
+      reason: `⚠️ GOLDEN RULE: ${condition} detected. Per AJCC 8th Edition, a tumor of any size causing collapse of the entire lung is automatically staged as pT2.`,
+    };
+  }
+
   // STEP 2: Check OVERRIDE rules in priority order (before size-based staging)
+  // GOLDEN RULE #1: The Invasion Trump Card - visceral pleural invasion (PL1/PL2) → pT2a
   // This ensures findings like visceral pleural invasion take precedence
   for (const rule of overrideRules) {
     if (rule.overrides) {
