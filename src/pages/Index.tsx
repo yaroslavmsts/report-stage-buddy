@@ -288,6 +288,33 @@ const Index = () => {
     setOverrideTimestamp(timestamp);
   };
 
+  const handleUndoOverride = () => {
+    if (!validationResult) return;
+    
+    // Re-run validation WITH conflict restrictions (hasConflict = true)
+    const calculatedResult = runValidation(
+      validationResult.parsedReport.inputs, 
+      validationResult.parsedReport.rawText, 
+      true // Restore: re-enable conflict restrictions
+    );
+    
+    // Update comparison to reflect conservative staging
+    const comparison = compareStages(
+      validationResult.parsedReport.reportedStage, 
+      calculatedResult, 
+      validationResult.parsedReport.inputs
+    );
+    
+    setValidationResult({
+      comparison,
+      calculatedResult,
+      parsedReport: validationResult.parsedReport,
+    });
+    
+    setIsOverridden(false);
+    setOverrideTimestamp(null);
+  };
+
   const handleLoadSample = (sampleKey: keyof typeof SAMPLE_REPORTS) => {
     setReportText(SAMPLE_REPORTS[sampleKey].report);
     setValidationResult(null);
@@ -520,6 +547,7 @@ const Index = () => {
                 calculatedResult={validationResult.calculatedResult}
                 parsedReport={validationResult.parsedReport}
                 onOverride={handleOverride}
+                onUndoOverride={handleUndoOverride}
                 isOverridden={isOverridden}
                 overrideTimestamp={overrideTimestamp || undefined}
               />
