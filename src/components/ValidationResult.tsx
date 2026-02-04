@@ -18,11 +18,12 @@ interface ValidationResultProps {
   calculatedResult: ValidationResultType;
   parsedReport: ParsedReport;
   onOverride?: () => void;
+  onUndoOverride?: () => void;
   isOverridden?: boolean;
   overrideTimestamp?: string;
 }
 
-export function ValidationResult({ comparison, calculatedResult, parsedReport, onOverride, isOverridden, overrideTimestamp }: ValidationResultProps) {
+export function ValidationResult({ comparison, calculatedResult, parsedReport, onOverride, onUndoOverride, isOverridden, overrideTimestamp }: ValidationResultProps) {
   const hasConflict = parsedReport.hasConflict && !isOverridden;
   const isPass = comparison.isMatch && !comparison.isAutoCalculated && !hasConflict;
   const isAutoCalculated = comparison.isAutoCalculated && comparison.isMatch && !hasConflict;
@@ -233,7 +234,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
           <AlertTitle className="text-info font-semibold">
             ✓ User Verified - Manual Override Applied
           </AlertTitle>
-          <AlertDescription className="mt-2 space-y-2">
+          <AlertDescription className="mt-2 space-y-3">
             <p className="text-sm text-foreground">
               The conflict warnings have been reviewed and findings confirmed. Full staging logic has been restored, including invasion-based overrides.
             </p>
@@ -247,6 +248,23 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
                 ⚠️ <span className="font-semibold">Note:</span> Manual override applied by user. AI safety protocols bypassed for this calculation.
               </p>
             </div>
+            
+            {/* Undo Override Button */}
+            {onUndoOverride && (
+              <div className="pt-2 border-t border-info/30">
+                <Button 
+                  onClick={onUndoOverride}
+                  variant="outline"
+                  className="w-full border-amber-500 text-amber-600 hover:bg-amber-500/10 hover:text-amber-600"
+                >
+                  <AlertTriangle className="mr-2 h-4 w-4" />
+                  Undo Override & Restore Conservative Staging
+                </Button>
+                <p className="text-[10px] text-muted-foreground mt-2 text-center">
+                  This will restore AI safety protocols and revert to conservative size-based staging.
+                </p>
+              </div>
+            )}
           </AlertDescription>
         </Alert>
       )}
