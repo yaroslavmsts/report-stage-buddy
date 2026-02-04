@@ -185,6 +185,35 @@ MICROSCOPIC DESCRIPTION:
 Sections reveal a 1.5 cm well-differentiated invasive adenocarcinoma with acinar pattern. The tumor is confined to the pulmonary parenchyma. The visceral pleura is intact with no evidence of invasion. Elastic stain confirms intact elastic layer (PL0). The chest wall and pericardium are not invaded. All lymph nodes examined are negative for metastatic disease.
 
 NOTE: This example demonstrates proper negation handling - despite mentions of pleura, chest wall, and pericardium, the negative phrasing ("intact", "no invasion", "negative for") ensures size-based staging is used correctly.`
+  },
+  conflictExample: {
+    name: "⚠️ Conflict Detection Example",
+    description: "Demonstrates ambiguous language triggering safety layer",
+    report: `PATHOLOGY REPORT
+
+DIAGNOSIS: Left lower lobe lobectomy - Invasive adenocarcinoma
+
+TUMOR SIZE: 2.3 cm in greatest dimension
+
+HISTOLOGIC TYPE: Invasive adenocarcinoma, solid predominant
+
+VISCERAL PLEURA: The visceral pleura shows no definitive invasion but tumor cells are present at the pleural surface.
+
+CHEST WALL: Chest wall invasion is not clearly identified, however tumor abuts the parietal pleura.
+
+PERICARDIUM: Pericardial involvement appears absent but cannot be entirely excluded.
+
+MARGINS: Surgical margins are negative.
+
+LYMPH NODES:
+- Hilar lymph nodes: Negative for metastatic carcinoma (0/3)
+
+PATHOLOGIC STAGE: pT2a pN0
+
+MICROSCOPIC DESCRIPTION:
+The tumor measures 2.3 cm and demonstrates solid growth pattern. The pleural invasion status is equivocal - elastic stain shows tumor approaching but not definitively crossing the elastic layer. The chest wall appears intact but the proximity of tumor to chest wall raises concern.
+
+NOTE: This example demonstrates CONFLICT DETECTION - sentences contain both invasion keywords AND negation keywords in close proximity, triggering the safety layer for manual verification.`
   }
 };
 
@@ -206,7 +235,8 @@ const Index = () => {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     const parsedReport = parsePathologyReport(reportText);
-    const calculatedResult = runValidation(parsedReport.inputs, parsedReport.rawText);
+    // Pass hasConflict to runValidation for conservative staging when conflicts detected
+    const calculatedResult = runValidation(parsedReport.inputs, parsedReport.rawText, parsedReport.hasConflict);
     const comparison = compareStages(parsedReport.reportedStage, calculatedResult, parsedReport.inputs);
 
     setValidationResult({
@@ -342,11 +372,17 @@ const Index = () => {
                           </div>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuLabel>🔍 Negation Handling</DropdownMenuLabel>
+                        <DropdownMenuLabel>🔍 Safety Logic Layer</DropdownMenuLabel>
                         <DropdownMenuItem onClick={() => handleLoadSample('negationExample')}>
                           <div>
                             <p className="font-medium">{SAMPLE_REPORTS.negationExample.name}</p>
                             <p className="text-xs text-muted-foreground">{SAMPLE_REPORTS.negationExample.description}</p>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleLoadSample('conflictExample')}>
+                          <div>
+                            <p className="font-medium">{SAMPLE_REPORTS.conflictExample.name}</p>
+                            <p className="text-xs text-muted-foreground">{SAMPLE_REPORTS.conflictExample.description}</p>
                           </div>
                         </DropdownMenuItem>
                       </DropdownMenuContent>

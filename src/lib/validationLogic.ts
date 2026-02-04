@@ -66,6 +66,14 @@ export interface ValidationResult {
   reason: string;
 }
 
+export interface ConflictInfo {
+  sentence: string;
+  invasionKeyword: string;
+  negationKeyword: string;
+  startIndex: number;
+  endIndex: number;
+}
+
 export interface ParsedReport {
   inputs: ValidationInputs;
   extractedText: {
@@ -80,6 +88,109 @@ export interface ParsedReport {
   reportedNStage: string | null;
   reportedMStage: string | null;
   rawText: string;
+  conflicts: ConflictInfo[];
+  hasConflict: boolean;
+}
+
+// ============================================
+// CONFLICT DETECTION - Safety Logic Layer
+// ============================================
+// Keywords that indicate invasion
+const INVASION_KEYWORDS = [
+  'pleural', 'pleura', 'invasion', 'invades', 'invading', 'invaded',
+  'chest wall', 'pericardium', 'pericardial', 'diaphragm', 'diaphragmatic',
+  'phrenic nerve', 'main bronchus', 'bronchial', 'mediastinum', 'mediastinal',
+  'pl1', 'pl2', 'pl3', 'visceral'
+];
+
+// Keywords that indicate negation
+const NEGATION_KEYWORDS = [
+  'no', 'not', 'absent', 'intact', 'negative', 'without', 'none', 'free',
+  'unremarkable', 'normal', 'preserved', 'denied', 'excluded'
+];
+
+/**
+ * Detects sentences containing both invasion and negation keywords within 10-word proximity
+ * This is a safety layer to flag potentially contradictory language
+ */
+export function detectInvasionConflicts(reportText: string): ConflictInfo[] {
+  const conflicts: ConflictInfo[] = [];
+  
+  // Split into sentences (handle multiple sentence endings)
+  const sentences = reportText.split(/(?<=[.!?])\s+|(?<=\n)/);
+  let currentIndex = 0;
+  
+  for (const sentence of sentences) {
+    if (!sentence.trim()) {
+      currentIndex += sentence.length;
+      continue;
+    }
+    
+    const lowerSentence = sentence.toLowerCase();
+    const words = lowerSentence.split(/\s+/);
+    
+    // Find positions of invasion and negation keywords
+    let invasionPositions: { keyword: string; wordIndex: number }[] = [];
+    let negationPositions: { keyword: string; wordIndex: number }[] = [];
+    
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i].replace(/[^a-z0-9]/g, '');
+      
+      // Check for invasion keywords (including multi-word)
+      for (const invasionKey of INVASION_KEYWORDS) {
+        if (invasionKey.includes(' ')) {
+          // Multi-word keyword - check if current position starts this phrase
+          const phraseWords = invasionKey.split(' ');
+          if (i + phraseWords.length <= words.length) {
+            const potentialPhrase = words.slice(i, i + phraseWords.length)
+              .map(w => w.replace(/[^a-z0-9]/g, '')).join(' ');
+            if (potentialPhrase === invasionKey.replace(/\s+/g, ' ')) {
+              invasionPositions.push({ keyword: invasionKey, wordIndex: i });
+            }
+          }
+        } else if (word === invasionKey || word.includes(invasionKey)) {
+          invasionPositions.push({ keyword: invasionKey, wordIndex: i });
+        }
+      }
+      
+      // Check for negation keywords
+      for (const negationKey of NEGATION_KEYWORDS) {
+        if (word === negationKey) {
+          negationPositions.push({ keyword: negationKey, wordIndex: i });
+        }
+      }
+    }
+    
+    // Check for any invasion-negation pairs within 10-word proximity
+    for (const invasion of invasionPositions) {
+      for (const negation of negationPositions) {
+        const distance = Math.abs(invasion.wordIndex - negation.wordIndex);
+        if (distance <= 10) {
+          // Found a conflict!
+          const startIndex = reportText.indexOf(sentence.trim(), currentIndex);
+          const endIndex = startIndex + sentence.trim().length;
+          
+          conflicts.push({
+            sentence: sentence.trim(),
+            invasionKeyword: invasion.keyword,
+            negationKeyword: negation.keyword,
+            startIndex: startIndex >= 0 ? startIndex : currentIndex,
+            endIndex: startIndex >= 0 ? endIndex : currentIndex + sentence.length
+          });
+          
+          // Only report one conflict per sentence to avoid duplicates
+          break;
+        }
+      }
+      if (conflicts.length > 0 && conflicts[conflicts.length - 1].sentence === sentence.trim()) {
+        break;
+      }
+    }
+    
+    currentIndex += sentence.length;
+  }
+  
+  return conflicts;
 }
 
 // Parse the pathology report text to extract relevant information
@@ -615,11 +726,27 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   const icd10Result = getICD10Code(reportText);
   extractedText.siteFindings.push(`${icd10Result.site} (${icd10Result.code})`);
 
-  return { inputs, extractedText, reportedStage, reportedNStage, reportedMStage, rawText: reportText };
+  // ============================================
+  // CONFLICT DETECTION - Safety Logic Layer
+  // ============================================
+  // Detect invasion + negation keywords within 10-word proximity
+  const conflicts = detectInvasionConflicts(reportText);
+
+  return { 
+    inputs, 
+    extractedText, 
+    reportedStage, 
+    reportedNStage, 
+    reportedMStage, 
+    rawText: reportText,
+    conflicts,
+    hasConflict: conflicts.length > 0
+  };
 }
 
 // Run the decision tree validation - now includes full TNM
-export function runValidation(inputs: ValidationInputs, rawText: string = ''): ValidationResult {
+// When hasConflict is true, skip invasion-based overrides and use conservative size-based staging
+export function runValidation(inputs: ValidationInputs, rawText: string = '', hasConflict: boolean = false): ValidationResult {
   // Calculate derived values
   let estimated_invasive_size_cm: number | null = null;
   if (
@@ -753,17 +880,20 @@ export function runValidation(inputs: ValidationInputs, rawText: string = ''): V
   // STEP 2: Check OVERRIDE rules in priority order (before size-based staging)
   // GOLDEN RULE #1: The Invasion Trump Card - visceral pleural invasion (PL1/PL2) → pT2a
   // This ensures findings like visceral pleural invasion take precedence
-  for (const rule of overrideRules) {
-    if (rule.overrides) {
-      for (const finding of findings) {
-        if (matchesOverride(finding, rule.overrides)) {
-          return buildResult(
-            'applicable',
-            rule.stage,
-            'override',
-            undefined,
-            `${getStagingSource()}: ${finding.toUpperCase()} is present. Per staging criteria: "${rule.criteria}". This overrides tumor size-based staging.`
-          );
+  // CONFLICT SAFETY: If hasConflict is true, skip invasion-based overrides
+  if (!hasConflict) {
+    for (const rule of overrideRules) {
+      if (rule.overrides) {
+        for (const finding of findings) {
+          if (matchesOverride(finding, rule.overrides)) {
+            return buildResult(
+              'applicable',
+              rule.stage,
+              'override',
+              undefined,
+              `${getStagingSource()}: ${finding.toUpperCase()} is present. Per staging criteria: "${rule.criteria}". This overrides tumor size-based staging.`
+            );
+          }
         }
       }
     }

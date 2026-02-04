@@ -1,6 +1,7 @@
-import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, DollarSign, Heart, FileText } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, DollarSign, Heart, FileText, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ValidationResult as ValidationResultType, ParsedReport } from '@/lib/validationLogic';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo } from '@/lib/validationLogic';
 
 interface ValidationResultProps {
   comparison: {
@@ -16,12 +17,24 @@ interface ValidationResultProps {
 }
 
 export function ValidationResult({ comparison, calculatedResult, parsedReport }: ValidationResultProps) {
-  const isPass = comparison.isMatch && !comparison.isAutoCalculated;
-  const isAutoCalculated = comparison.isAutoCalculated && comparison.isMatch;
+  const hasConflict = parsedReport.hasConflict;
+  const isPass = comparison.isMatch && !comparison.isAutoCalculated && !hasConflict;
+  const isAutoCalculated = comparison.isAutoCalculated && comparison.isMatch && !hasConflict;
   const isIndeterminate = calculatedResult.applicability === 'indeterminate' && !comparison.isAutoCalculated;
   const isInsufficientData = comparison.isAutoCalculated && !comparison.isMatch;
 
   const getStatusConfig = () => {
+    // CONFLICT DETECTED takes highest priority
+    if (hasConflict) {
+      return {
+        icon: AlertTriangle,
+        bgClass: 'bg-amber-500/10 border-amber-500/50',
+        iconClass: 'text-amber-500',
+        textClass: 'text-amber-600 dark:text-amber-400',
+        label: 'CONFLICT DETECTED',
+        pulseClass: 'animate-pulse',
+      };
+    }
     if (isAutoCalculated) {
       return {
         icon: Lightbulb,
@@ -105,12 +118,56 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
                 {config.label}
               </h3>
               <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2">
-                {comparison.message}
+                {hasConflict 
+                  ? 'Linguistic conflict detected. Using conservative size-based staging only.'
+                  : comparison.message}
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Conflict Detection Alert */}
+      {hasConflict && parsedReport.conflicts.length > 0 && (
+        <Alert className="border-2 border-amber-500/50 bg-amber-500/10">
+          <AlertTriangle className="h-5 w-5 text-amber-500" />
+          <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold">
+            Linguistic Conflict Detected
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-3">
+            <p className="text-sm text-foreground">
+              The report contains contradictory terms regarding invasion status. Please verify manually.
+            </p>
+            
+            {/* Highlighted conflicting sentences */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Conflicting Sentences Found:
+              </p>
+              {parsedReport.conflicts.map((conflict, index) => (
+                <div 
+                  key={index}
+                  className="p-2 sm:p-3 rounded-md bg-amber-500/20 border border-amber-500/30"
+                >
+                  <p className="text-xs sm:text-sm font-mono text-foreground leading-relaxed">
+                    "{conflict.sentence}"
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    Found: <span className="font-semibold">"{conflict.invasionKeyword}"</span> + <span className="font-semibold">"{conflict.negationKeyword}"</span> within 10-word proximity
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Conservative staging disclaimer */}
+            <div className="p-2 rounded bg-muted/50 border border-border">
+              <p className="text-xs text-muted-foreground">
+                <span className="font-semibold text-amber-600 dark:text-amber-400">⚠️ Conservative Staging Applied:</span> Due to the detected conflict, invasion-based staging overrides have been disabled. The calculated stage is based on tumor size only. Invasion status could not be safely determined.
+              </p>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* AJCC Prognostic Group Card - Main staging focus */}
       {calculatedResult.stage_group && (
