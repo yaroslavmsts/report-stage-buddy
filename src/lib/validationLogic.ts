@@ -143,10 +143,12 @@ const NEGATION_KEYWORDS = [
   'unremarkable', 'normal', 'preserved', 'denied', 'excluded'
 ];
 
-// Ambiguity phrases that should trigger conflict warnings
-const AMBIGUITY_PHRASES = [
+// Ambiguity/uncertainty phrases that SHOULD trigger conflict warnings
+const UNCERTAINTY_PHRASES = [
   'cannot be ruled out',
   'cannot be excluded',
+  'cannot be entirely excluded',
+  'cannot be entirely ruled out',
   'can not be ruled out',
   'can not be excluded',
   'not ruled out',
@@ -167,13 +169,84 @@ const AMBIGUITY_PHRASES = [
   'cannot rule out',
 ];
 
-// Word proximity threshold for conflict detection
-const CONFLICT_PROXIMITY_THRESHOLD = 5;
+// Standard negation phrases that should be treated as CONFIRMED NEGATIVE (exempt from conflict)
+// These are clear, definitive negations linked directly to invasion findings
+const STANDARD_NEGATION_PHRASES = [
+  'no invasion',
+  'no invasion identified',
+  'no invasion seen',
+  'no invasion present',
+  'not identified',
+  'not seen',
+  'not present',
+  'negative for invasion',
+  'negative for pleural invasion',
+  'negative for visceral pleural invasion',
+  'absent',
+  'is absent',
+  'are absent',
+  'invasion absent',
+  'invasion is absent',
+  'invasion not identified',
+  'invasion not seen',
+  'invasion not present',
+  'no pleural invasion',
+  'no visceral pleural invasion',
+  'no chest wall invasion',
+  'no pericardial invasion',
+  'pleural invasion: absent',
+  'pleural invasion: negative',
+  'pleural invasion: not identified',
+  'pleural invasion: not seen',
+  'free of invasion',
+  'without invasion',
+  'intact pleura',
+  'pleura intact',
+  'visceral pleura intact',
+];
+
+// Word proximity threshold for conflict detection (reduced from 10 to 4)
+const CONFLICT_PROXIMITY_THRESHOLD = 4;
 
 /**
- * Detects sentences containing both invasion and negation keywords within 5-word proximity
- * If distance > 5 words, flags as "Ambiguous" rather than direct conflict
- * This is a safety layer to flag potentially contradictory language
+ * Checks if a sentence contains a standard negation phrase that confirms negative status
+ * These are clear, unambiguous negations that should NOT trigger conflict warnings
+ * IMPORTANT: If the sentence also contains uncertainty phrases, this returns false
+ * (uncertainty takes precedence over standard negation)
+ */
+function isStandardNegation(sentence: string): boolean {
+  const lowerSentence = sentence.toLowerCase();
+  
+  // First check if uncertainty phrases are present - they override standard negations
+  for (const phrase of UNCERTAINTY_PHRASES) {
+    if (lowerSentence.includes(phrase)) {
+      return false; // Uncertainty overrides standard negation
+    }
+  }
+  
+  return STANDARD_NEGATION_PHRASES.some(phrase => lowerSentence.includes(phrase));
+}
+
+/**
+ * Checks if a sentence contains uncertainty phrases that warrant conflict warnings
+ */
+function containsUncertaintyPhrase(sentence: string): { found: boolean; phrase: string | null } {
+  const lowerSentence = sentence.toLowerCase();
+  for (const phrase of UNCERTAINTY_PHRASES) {
+    if (lowerSentence.includes(phrase)) {
+      return { found: true, phrase };
+    }
+  }
+  return { found: false, phrase: null };
+}
+
+/**
+ * Detects sentences containing invasion-related uncertainty that needs manual verification
+ * 
+ * REFINED LOGIC:
+ * 1. Standard negations (e.g., "no invasion identified") = Confirmed Negative (no conflict)
+ * 2. Uncertainty phrases (e.g., "cannot be ruled out") = True Conflict trigger
+ * 3. Proximity threshold reduced to 4 words to prevent unrelated sentence interference
  */
 export function detectInvasionConflicts(reportText: string): ConflictInfo[] {
   const conflicts: ConflictInfo[] = [];
@@ -189,68 +262,40 @@ export function detectInvasionConflicts(reportText: string): ConflictInfo[] {
     }
     
     const lowerSentence = sentence.toLowerCase();
-    const words = lowerSentence.split(/\s+/);
     
-    // Find positions of invasion and negation keywords
-    let invasionPositions: { keyword: string; wordIndex: number }[] = [];
-    let negationPositions: { keyword: string; wordIndex: number }[] = [];
+    // Check if sentence contains invasion-related terms
+    const hasInvasionContext = INVASION_KEYWORDS.some(kw => lowerSentence.includes(kw));
     
-    for (let i = 0; i < words.length; i++) {
-      const word = words[i].replace(/[^a-z0-9]/g, '');
-      
-      // Check for invasion keywords (including multi-word)
-      for (const invasionKey of INVASION_KEYWORDS) {
-        if (invasionKey.includes(' ')) {
-          // Multi-word keyword - check if current position starts this phrase
-          const phraseWords = invasionKey.split(' ');
-          if (i + phraseWords.length <= words.length) {
-            const potentialPhrase = words.slice(i, i + phraseWords.length)
-              .map(w => w.replace(/[^a-z0-9]/g, '')).join(' ');
-            if (potentialPhrase === invasionKey.replace(/\s+/g, ' ')) {
-              invasionPositions.push({ keyword: invasionKey, wordIndex: i });
-            }
-          }
-        } else if (word === invasionKey || word.includes(invasionKey)) {
-          invasionPositions.push({ keyword: invasionKey, wordIndex: i });
-        }
-      }
-      
-      // Check for negation keywords
-      for (const negationKey of NEGATION_KEYWORDS) {
-        if (word === negationKey) {
-          negationPositions.push({ keyword: negationKey, wordIndex: i });
-        }
-      }
+    if (!hasInvasionContext) {
+      currentIndex += sentence.length;
+      continue;
     }
     
-    // Check for any invasion-negation pairs
-    // Within 5 words = proximity conflict, 6-10 words = ambiguous
-    for (const invasion of invasionPositions) {
-      for (const negation of negationPositions) {
-        const distance = Math.abs(invasion.wordIndex - negation.wordIndex);
-        if (distance <= 10) {
-          const startIndex = reportText.indexOf(sentence.trim(), currentIndex);
-          const endIndex = startIndex + sentence.trim().length;
-          
-          // Determine conflict type based on distance
-          const conflictType = distance <= CONFLICT_PROXIMITY_THRESHOLD ? 'proximity' : 'ambiguity';
-          
-          conflicts.push({
-            sentence: sentence.trim(),
-            invasionKeyword: invasion.keyword,
-            negationKeyword: negation.keyword,
-            startIndex: startIndex >= 0 ? startIndex : currentIndex,
-            endIndex: startIndex >= 0 ? endIndex : currentIndex + sentence.length,
-            conflictType
-          });
-          
-          // Only report one conflict per sentence to avoid duplicates
-          break;
-        }
-      }
-      if (conflicts.length > 0 && conflicts[conflicts.length - 1].sentence === sentence.trim()) {
-        break;
-      }
+    // RULE 1: Check for standard negations - these are CONFIRMED NEGATIVE, skip
+    if (isStandardNegation(sentence)) {
+      currentIndex += sentence.length;
+      continue;
+    }
+    
+    // RULE 2: Check for uncertainty phrases - TRUE CONFLICT
+    const uncertainty = containsUncertaintyPhrase(sentence);
+    if (uncertainty.found) {
+      const startIndex = reportText.indexOf(sentence.trim(), currentIndex);
+      const endIndex = startIndex + sentence.trim().length;
+      
+      const invasionKeyword = INVASION_KEYWORDS.find(kw => lowerSentence.includes(kw)) || 'invasion';
+      
+      conflicts.push({
+        sentence: sentence.trim(),
+        invasionKeyword,
+        negationKeyword: uncertainty.phrase!,
+        startIndex: startIndex >= 0 ? startIndex : currentIndex,
+        endIndex: startIndex >= 0 ? endIndex : currentIndex + sentence.length,
+        conflictType: 'ambiguity'
+      });
+      
+      currentIndex += sentence.length;
+      continue;
     }
     
     currentIndex += sentence.length;
@@ -265,7 +310,6 @@ export function detectInvasionConflicts(reportText: string): ConflictInfo[] {
  */
 export function detectAmbiguityPhrases(reportText: string): ConflictInfo[] {
   const conflicts: ConflictInfo[] = [];
-  const lowerText = reportText.toLowerCase();
   
   // Split into sentences
   const sentences = reportText.split(/(?<=[.!?])\s+|(?<=\n)/);
@@ -279,8 +323,8 @@ export function detectAmbiguityPhrases(reportText: string): ConflictInfo[] {
     
     const lowerSentence = sentence.toLowerCase();
     
-    // Check for ambiguity phrases in context with invasion-related terms
-    for (const phrase of AMBIGUITY_PHRASES) {
+    // Check for uncertainty phrases in context with invasion-related terms
+    for (const phrase of UNCERTAINTY_PHRASES) {
       if (lowerSentence.includes(phrase)) {
         // Check if the sentence also mentions invasion-related terms
         const invasionTerms = ['invasion', 'invade', 'pleural', 'pleura', 'chest wall', 
@@ -545,7 +589,7 @@ export function detectMultiplePrimaryTumors(reportText: string): boolean {
   const multiplePatterns = [
     /multiple\s*(primary\s*)?(tumors?|nodules?|masses?|lesions?)/i,
     /\d+\s*(separate|distinct|synchronous)\s*(tumors?|nodules?|masses?|lesions?)/i,
-    /(two|three|four|2|3|4)\s*(separate\s*)?(primary\s*)?(tumors?|nodules?|masses?|lesions?)/i,
+    /(two|three|four|2|3|4)\s*(separate\s*|distinct\s*)?(primary\s*)?(tumors?|nodules?|masses?|lesions?)/i,
     /multifocal\s*(tumor|carcinoma|adenocarcinoma)/i,
     /synchronous\s*(primary\s*)?(tumors?|carcinomas?)/i,
     /(tumor|lesion)\s*(#|number)?\s*(1|2|3|one|two|three)/i,

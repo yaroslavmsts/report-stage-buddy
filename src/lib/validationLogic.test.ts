@@ -2,14 +2,59 @@ import { describe, it, expect } from 'vitest';
 import { detectInvasionConflicts, detectAmbiguityPhrases, detectPT4Structures, detectNodalStationAlerts, detectMarginStatus, detectMultiplePrimaryTumors, ConflictInfo, NodalStationAlert, MarginAlert } from './validationLogic';
 
 describe('detectInvasionConflicts', () => {
-  describe('should NOT detect conflict (clear negation patterns)', () => {
-    it('returns empty array for clear "no invasion" statement', () => {
+  describe('should NOT detect conflict (standard negation patterns - CONFIRMED NEGATIVE)', () => {
+    it('returns empty array for "no invasion identified" - standard negation', () => {
       const text = 'Visceral pleura: No invasion identified.';
       const conflicts = detectInvasionConflicts(text);
-      // This is clear negation, but invasion + negation are within proximity
-      // The function detects proximity, not semantic clarity
-      // So this WILL trigger a conflict (by design - safety first)
-      expect(conflicts.length).toBeGreaterThanOrEqual(0);
+      expect(conflicts).toEqual([]);
+    });
+
+    it('returns empty array for "no invasion" - clear negation', () => {
+      const text = 'No pleural invasion.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
+    });
+
+    it('returns empty array for "invasion is absent" - standard negation', () => {
+      const text = 'Pleural invasion is absent.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
+    });
+
+    it('returns empty array for "negative for invasion" - standard negation', () => {
+      const text = 'Negative for pleural invasion.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
+    });
+
+    it('returns empty array for "invasion not identified" - standard negation', () => {
+      const text = 'Pleural invasion not identified.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
+    });
+
+    it('returns empty array for "invasion not seen" - standard negation', () => {
+      const text = 'Visceral pleural invasion not seen.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
+    });
+
+    it('returns empty array for "pleura intact" - standard negation', () => {
+      const text = 'The visceral pleura is intact.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
+    });
+
+    it('returns empty array for "without invasion" - standard negation', () => {
+      const text = 'Tumor without pleural invasion.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
+    });
+
+    it('returns empty array for "free of invasion" - standard negation', () => {
+      const text = 'Chest wall free of invasion.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
     });
 
     it('returns empty array for text with no invasion keywords', () => {
@@ -29,46 +74,98 @@ describe('detectInvasionConflicts', () => {
       const conflicts = detectInvasionConflicts(text);
       expect(conflicts).toEqual([]);
     });
-
-    it('returns empty array when keywords are more than 10 words apart', () => {
-      const text = 'The pleural surface shows tumor cells extending through the elastic layer. The surgical margins, lymphovascular spaces, and all examined tissue planes are completely negative for malignancy.';
-      const conflicts = detectInvasionConflicts(text);
-      // 'pleural' and 'negative' are far apart
-      expect(conflicts).toEqual([]);
-    });
   });
 
-  describe('should detect conflict (ambiguous/contradictory language)', () => {
-    it('detects conflict when invasion and negation keywords are within 10 words', () => {
-      const text = 'The visceral pleura shows no definitive invasion.';
+  describe('should detect conflict (TRUE CONFLICT - uncertainty phrases only)', () => {
+    it('detects conflict with "cannot be ruled out"', () => {
+      const text = 'Visceral pleural invasion cannot be ruled out.';
       const conflicts = detectInvasionConflicts(text);
       expect(conflicts.length).toBeGreaterThan(0);
-      expect(conflicts[0].invasionKeyword).toBeDefined();
-      expect(conflicts[0].negationKeyword).toBeDefined();
+      expect(conflicts[0].conflictType).toBe('ambiguity');
+      expect(conflicts[0].negationKeyword).toBe('cannot be ruled out');
     });
 
-    it('detects conflict with "invasion not clearly identified"', () => {
-      const text = 'Chest wall invasion is not clearly identified.';
+    it('detects conflict with "cannot be excluded"', () => {
+      const text = 'Pericardial invasion cannot be excluded.';
       const conflicts = detectInvasionConflicts(text);
       expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].negationKeyword).toBe('cannot be excluded');
     });
 
-    it('detects conflict with "appears absent but cannot be excluded"', () => {
-      const text = 'Pericardial involvement appears absent but cannot be entirely excluded.';
+    it('detects conflict with "not entirely excluded"', () => {
+      const text = 'Chest wall invasion is not entirely excluded.';
       const conflicts = detectInvasionConflicts(text);
       expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].negationKeyword).toBe('not entirely excluded');
     });
 
-    it('detects conflict with mixed positive/negative language', () => {
-      const text = 'Tumor cells are present at the pleural surface but no definitive invasion is seen.';
+    it('detects conflict with "possible"', () => {
+      const text = 'Possible pleural invasion is noted.';
       const conflicts = detectInvasionConflicts(text);
       expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].negationKeyword).toBe('possible');
+    });
+
+    it('detects conflict with "equivocal"', () => {
+      const text = 'The pleural invasion status is equivocal.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].negationKeyword).toBe('equivocal');
+    });
+
+    it('detects conflict with "suspicious for"', () => {
+      const text = 'Findings suspicious for visceral pleural invasion.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].negationKeyword).toBe('suspicious for');
+    });
+
+    it('detects conflict with "suggestive of"', () => {
+      const text = 'Changes suggestive of pericardial invasion.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].negationKeyword).toBe('suggestive of');
+    });
+
+    it('detects conflict with "may represent"', () => {
+      const text = 'This may represent early pleural invasion.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].negationKeyword).toBe('may represent');
+    });
+
+    it('detects conflict with "indeterminate"', () => {
+      const text = 'Pleural invasion status is indeterminate.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].negationKeyword).toBe('indeterminate');
+    });
+
+    it('detects conflict with "uncertain"', () => {
+      const text = 'Chest wall invasion is uncertain.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].negationKeyword).toBe('uncertain');
+    });
+
+    it('detects conflict with "concerning for"', () => {
+      const text = 'Findings concerning for pleural invasion.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].negationKeyword).toBe('concerning for');
+    });
+
+    it('detects conflict with "favor" / "favour"', () => {
+      const text = 'Findings favor pleural invasion.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].negationKeyword).toBe('favor');
     });
   });
 
   describe('conflict info structure', () => {
     it('returns correct conflict info structure', () => {
-      const text = 'The visceral pleura shows no invasion.';
+      const text = 'Visceral pleural invasion cannot be ruled out.';
       const conflicts = detectInvasionConflicts(text);
       
       expect(conflicts.length).toBeGreaterThan(0);
@@ -79,16 +176,18 @@ describe('detectInvasionConflicts', () => {
       expect(conflict).toHaveProperty('negationKeyword');
       expect(conflict).toHaveProperty('startIndex');
       expect(conflict).toHaveProperty('endIndex');
+      expect(conflict).toHaveProperty('conflictType');
       
       expect(typeof conflict.sentence).toBe('string');
       expect(typeof conflict.invasionKeyword).toBe('string');
       expect(typeof conflict.negationKeyword).toBe('string');
       expect(typeof conflict.startIndex).toBe('number');
       expect(typeof conflict.endIndex).toBe('number');
+      expect(conflict.conflictType).toBe('ambiguity');
     });
 
     it('includes the conflicting sentence in the result', () => {
-      const sentence = 'Pleural invasion is absent.';
+      const sentence = 'Pleural invasion cannot be excluded.';
       const text = `Some other finding. ${sentence} Another finding.`;
       const conflicts = detectInvasionConflicts(text);
       
@@ -98,18 +197,18 @@ describe('detectInvasionConflicts', () => {
   });
 
   describe('multiple conflicts', () => {
-    it('detects multiple conflicts in different sentences', () => {
+    it('detects multiple conflicts in different sentences with uncertainty', () => {
       const text = `
-        The visceral pleura shows no invasion.
-        Chest wall involvement is not identified.
-        Pericardial invasion appears absent.
+        Visceral pleural invasion cannot be ruled out.
+        Chest wall involvement is possible.
+        Pericardial invasion is equivocal.
       `;
       const conflicts = detectInvasionConflicts(text);
       expect(conflicts.length).toBeGreaterThanOrEqual(3);
     });
 
     it('reports only one conflict per sentence to avoid duplicates', () => {
-      const text = 'The pleural invasion and chest wall invasion are both absent and negative.';
+      const text = 'The pleural invasion is equivocal and possible chest wall invasion cannot be excluded.';
       const conflicts = detectInvasionConflicts(text);
       // Should have at most one conflict for this single sentence
       expect(conflicts.length).toBeLessThanOrEqual(1);
@@ -127,130 +226,34 @@ describe('detectInvasionConflicts', () => {
       expect(conflicts).toEqual([]);
     });
 
-    it('handles text with no sentence delimiters', () => {
-      const text = 'pleural invasion absent';
+    it('handles text with no sentence delimiters and uncertainty', () => {
+      const text = 'pleural invasion possible';
       const conflicts = detectInvasionConflicts(text);
       expect(conflicts.length).toBeGreaterThan(0);
     });
 
     it('handles case insensitivity', () => {
-      const text = 'VISCERAL PLEURA: NO INVASION IDENTIFIED.';
+      const text = 'VISCERAL PLEURA: INVASION CANNOT BE RULED OUT.';
       const conflicts = detectInvasionConflicts(text);
       expect(conflicts.length).toBeGreaterThan(0);
     });
 
     it('handles mixed case', () => {
-      const text = 'Visceral Pleura shows No Invasion.';
+      const text = 'Visceral Pleura shows Possible Invasion.';
       const conflicts = detectInvasionConflicts(text);
       expect(conflicts.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe('specific invasion keywords', () => {
-    it('detects conflict with "pleura" keyword', () => {
-      const text = 'The visceral pleura is intact.';
-      const conflicts = detectInvasionConflicts(text);
-      expect(conflicts.length).toBeGreaterThan(0);
-      // 'visceral' is also an invasion keyword, so either visceral or pleura is valid
-      expect(['pleura', 'pleural', 'visceral']).toContain(conflicts[0].invasionKeyword);
-    });
-
-    it('detects conflict with "chest wall" keyword', () => {
-      const text = 'No chest wall involvement.';
-      const conflicts = detectInvasionConflicts(text);
-      expect(conflicts.length).toBeGreaterThan(0);
-    });
-
-    it('detects conflict with "pericardium" keyword', () => {
-      const text = 'Pericardium is negative for tumor.';
-      const conflicts = detectInvasionConflicts(text);
-      expect(conflicts.length).toBeGreaterThan(0);
-    });
-
-    it('detects conflict with "diaphragm" keyword', () => {
-      const text = 'The diaphragm is not invaded.';
-      const conflicts = detectInvasionConflicts(text);
-      expect(conflicts.length).toBeGreaterThan(0);
-    });
-
-    it('detects conflict with PL status keywords', () => {
-      const text = 'PL1 status is not confirmed.';
-      const conflicts = detectInvasionConflicts(text);
-      expect(conflicts.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe('specific negation keywords', () => {
-    it('detects "no" negation', () => {
-      const text = 'No pleural invasion.';
-      const conflicts = detectInvasionConflicts(text);
-      expect(conflicts.length).toBeGreaterThan(0);
-      expect(conflicts[0].negationKeyword).toBe('no');
-    });
-
-    it('detects "not" negation', () => {
-      const text = 'Pleural invasion is not present.';
-      const conflicts = detectInvasionConflicts(text);
-      expect(conflicts.length).toBeGreaterThan(0);
-      expect(conflicts[0].negationKeyword).toBe('not');
-    });
-
-    it('detects "absent" negation', () => {
-      const text = 'Pleural invasion absent.';
-      const conflicts = detectInvasionConflicts(text);
-      expect(conflicts.length).toBeGreaterThan(0);
-      expect(conflicts[0].negationKeyword).toBe('absent');
-    });
-
-    it('detects "intact" negation', () => {
-      const text = 'Visceral pleura intact.';
-      const conflicts = detectInvasionConflicts(text);
-      expect(conflicts.length).toBeGreaterThan(0);
-      expect(conflicts[0].negationKeyword).toBe('intact');
-    });
-
-    it('detects "negative" negation', () => {
-      const text = 'Pleural invasion negative.';
-      const conflicts = detectInvasionConflicts(text);
-      expect(conflicts.length).toBeGreaterThan(0);
-      expect(conflicts[0].negationKeyword).toBe('negative');
-    });
-
-    it('detects "without" negation', () => {
-      const text = 'Tumor without pleural invasion.';
-      const conflicts = detectInvasionConflicts(text);
-      expect(conflicts.length).toBeGreaterThan(0);
-      expect(conflicts[0].negationKeyword).toBe('without');
-    });
-  });
-
-  describe('10-word proximity threshold', () => {
-    it('detects conflict at exactly 10 words apart', () => {
-      // "no" is word 0, "invasion" needs to be at word 10 or less
-      const text = 'No one two three four five six seven eight nine invasion.';
-      const conflicts = detectInvasionConflicts(text);
-      expect(conflicts.length).toBeGreaterThan(0);
-    });
-
-    it('does not detect conflict at 11+ words apart', () => {
-      // "no" is word 0, "invasion" is at word 11
-      const text = 'No one two three four five six seven eight nine ten invasion.';
-      const conflicts = detectInvasionConflicts(text);
-      expect(conflicts).toEqual([]);
     });
   });
 
   describe('real-world pathology report excerpts', () => {
-    it('handles typical negative finding format', () => {
+    it('handles typical negative finding format - NO conflict (confirmed negative)', () => {
       const text = 'VISCERAL PLEURA: Intact. No visceral pleural invasion identified.';
       const conflicts = detectInvasionConflicts(text);
-      // This has multiple invasion+negation pairs close together
-      expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts).toEqual([]);
     });
 
     it('handles equivocal finding that should trigger conflict', () => {
-      // 'not' and 'pleural' are within 10 words in this sentence
-      const text = 'Elastic stain shows tumor approaching but not crossing the pleural elastic layer.';
+      const text = 'Elastic stain shows tumor approaching the pleural elastic layer but invasion cannot be ruled out.';
       const conflicts = detectInvasionConflicts(text);
       expect(conflicts.length).toBeGreaterThan(0);
     });
@@ -260,219 +263,96 @@ describe('detectInvasionConflicts', () => {
       const conflicts = detectInvasionConflicts(text);
       expect(conflicts).toEqual([]);
     });
+
+    it('handles "cannot be entirely excluded" in clinical context', () => {
+      const text = 'Pericardial involvement appears absent but cannot be entirely excluded based on the current sections.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].negationKeyword).toBe('cannot be entirely excluded');
+    });
   });
 
-  describe('edge cases: clear negation vs ambiguous language', () => {
-    // These tests verify the distinction between clear negative statements
-    // and ambiguous/equivocal statements that should trigger conflicts
+  describe('edge cases: standard negations should NOT trigger conflicts', () => {
+    // These tests verify that standard negations are treated as CONFIRMED NEGATIVE
 
-    describe('clear negation patterns (still triggers conflict by design)', () => {
-      // NOTE: The conflict detector flags ANY invasion+negation proximity
-      // This is intentional - safety first, let humans verify
-
-      it('"no invasion identified" - invasion+negation in proximity', () => {
-        const text = 'No pleural invasion identified.';
-        const conflicts = detectInvasionConflicts(text);
-        // This triggers conflict because "no" + "invasion" are within 10 words
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
-
-      it('"invasion is absent" - invasion+negation in proximity', () => {
-        const text = 'Pleural invasion is absent.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
-
-      it('"negative for invasion" - invasion+negation in proximity', () => {
-        const text = 'Negative for pleural invasion.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
+    it('"no invasion identified" - confirmed negative, no conflict', () => {
+      const text = 'No pleural invasion identified.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
     });
 
-    describe('ambiguous/equivocal patterns (should definitely trigger conflict)', () => {
-      it('"invasion not ruled out" - needs negation keyword present', () => {
-        // "cannot" and "ruled out" are not in our negation keywords
-        // This requires a negation keyword like "not" to trigger
-        const text = 'Pleural invasion is not ruled out.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
-
-      it('"invasion cannot be excluded" - uses "cannot" which has negation in proximity', () => {
-        // Note: "cannot" contains "not" when split, but we match whole words
-        // This text has "not" embedded, let's use explicit negation
-        const text = 'Chest wall invasion is not entirely excluded.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
-
-      it('"no definitive invasion" - hedging language', () => {
-        const text = 'No definitive pleural invasion is seen.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
-
-      it('"invasion is equivocal" - limitation: equivocal not a negation keyword', () => {
-        // "equivocal" is not in our negation keywords list
-        // This is a known limitation - we could add uncertainty words if needed
-        const text = 'The pleural invasion status is equivocal.';
-        const conflicts = detectInvasionConflicts(text);
-        // Currently returns empty - document this limitation
-        expect(conflicts.length).toBeGreaterThanOrEqual(0);
-      });
-
-      it('"invasion not clearly identified" - hedging language', () => {
-        const text = 'Pericardial invasion is not clearly identified.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
-
-      it('"possible invasion" with negation - mixed signals', () => {
-        const text = 'Possible pleural invasion, not confirmed.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
-
-      it('"invasion appears absent but..." - contradiction', () => {
-        const text = 'Pericardial invasion appears absent but cannot be entirely excluded.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
-
-      it('"tumor at pleural surface, no invasion" - ambiguous proximity', () => {
-        const text = 'Tumor cells are present at the pleural surface but no definitive invasion is identified.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
+    it('"invasion is absent" - confirmed negative, no conflict', () => {
+      const text = 'Pleural invasion is absent.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
     });
 
-    describe('definitive statements without conflict', () => {
-      it('"invasion is present" - clear positive, no conflict', () => {
-        const text = 'Visceral pleural invasion is present.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts).toEqual([]);
-      });
-
-      it('"PL1 confirmed" - clear positive, no conflict', () => {
-        const text = 'PL1 status confirmed on elastic stain.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts).toEqual([]);
-      });
-
-      it('"invades the chest wall" - clear positive, no conflict', () => {
-        const text = 'The tumor invades the chest wall.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts).toEqual([]);
-      });
-
-      it('"pericardial invasion identified" - clear positive, no conflict', () => {
-        const text = 'Pericardial invasion is identified and confirmed.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts).toEqual([]);
-      });
+    it('"negative for invasion" - confirmed negative, no conflict', () => {
+      const text = 'Negative for pleural invasion.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
     });
 
-    describe('complex multi-clause sentences', () => {
-      it('handles "while X, no Y" pattern', () => {
-        const text = 'While tumor extends to the pleural surface, no invasion beyond the elastic layer is identified.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
-
-      it('handles "X is present but Y is absent" pattern', () => {
-        const text = 'Tumor is present at the visceral pleura but invasion is absent.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
-
-      it('handles multiple findings in one sentence', () => {
-        const text = 'Pleural invasion is absent, chest wall is not involved, and pericardium shows no tumor.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
-
-      it('handles parenthetical clarification', () => {
-        const text = 'The visceral pleura (no invasion, PL0 on elastic stain) is intact.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
+    it('"invasion not seen" - confirmed negative, no conflict', () => {
+      const text = 'Visceral pleural invasion not seen.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
     });
 
-    describe('common pathology report phrasings', () => {
-      it('"VISCERAL PLEURA: Intact" - standard format', () => {
-        const text = 'VISCERAL PLEURA: Intact.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
+    it('"invasion not present" - confirmed negative, no conflict', () => {
+      const text = 'Pleural invasion not present.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
+    });
+  });
 
-      it('"Pleural invasion: Not identified" - standard format', () => {
-        const text = 'Pleural invasion: Not identified.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
-
-      it('"Chest wall: Free of tumor" - standard format', () => {
-        const text = 'Chest wall: Free of tumor.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
-
-      it('"Diaphragm: Uninvolved" - may not trigger (no direct negation keyword)', () => {
-        const text = 'Diaphragm: Uninvolved.';
-        const conflicts = detectInvasionConflicts(text);
-        // "uninvolved" is not in our negation keywords list, so may not trigger
-        // This is a known limitation - we could add it if needed
-        expect(conflicts.length).toBeGreaterThanOrEqual(0);
-      });
+  describe('common pathology report phrasings - standard negations', () => {
+    it('"VISCERAL PLEURA: Intact" - standard negation, no conflict', () => {
+      const text = 'VISCERAL PLEURA: Intact.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
     });
 
-    describe('5-word proximity threshold (upgraded from 10)', () => {
-      it('exactly 5 words between invasion and negation - triggers proximity conflict', () => {
-        // Word positions: no(0) a(1) b(2) c(3) d(4) invasion(5)
-        const text = 'No a b c d invasion.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-        expect(conflicts[0].conflictType).toBe('proximity');
-      });
+    it('"Pleural invasion: Not identified" - standard negation, no conflict', () => {
+      const text = 'Pleural invasion: Not identified.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
+    });
 
-      it('6 words between invasion and negation - triggers ambiguity conflict', () => {
-        // Word positions: no(0) a(1) b(2) c(3) d(4) e(5) invasion(6)
-        const text = 'No a b c d e invasion.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-        expect(conflicts[0].conflictType).toBe('ambiguity');
-      });
+    it('"No chest wall invasion" - standard negation, no conflict', () => {
+      const text = 'No chest wall invasion.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
+    });
+  });
 
-      it('10 words between invasion and negation - still triggers ambiguity', () => {
-        // Word positions: no(0) a(1) b(2) c(3) d(4) e(5) f(6) g(7) h(8) i(9) invasion(10)
-        const text = 'No a b c d e f g h i invasion.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-        expect(conflicts[0].conflictType).toBe('ambiguity');
-      });
+  describe('definitive statements without conflict', () => {
+    it('"invasion is present" - clear positive, no conflict', () => {
+      const text = 'Visceral pleural invasion is present.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
+    });
 
-      it('11 words between invasion and negation - no conflict', () => {
-        // Word positions: no(0) a(1) b(2) c(3) d(4) e(5) f(6) g(7) h(8) i(9) j(10) invasion(11)
-        const text = 'No a b c d e f g h i j invasion.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts).toEqual([]);
-      });
+    it('"PL1 confirmed" - clear positive, no conflict', () => {
+      const text = 'PL1 status confirmed on elastic stain.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
+    });
 
-      it('invasion before negation within 5 words - proximity conflict', () => {
-        const text = 'Pleural invasion is a absent.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
+    it('"invades the chest wall" - clear positive, no conflict', () => {
+      const text = 'The tumor invades the chest wall.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
+    });
 
-      it('negation before invasion within 5 words - proximity conflict', () => {
-        const text = 'No evidence of pleural invasion.';
-        const conflicts = detectInvasionConflicts(text);
-        expect(conflicts.length).toBeGreaterThan(0);
-      });
+    it('"pericardial invasion identified" - clear positive, no conflict', () => {
+      const text = 'Pericardial invasion is identified and confirmed.';
+      const conflicts = detectInvasionConflicts(text);
+      expect(conflicts).toEqual([]);
     });
   });
 });
+
 
 describe('detectAmbiguityPhrases', () => {
   describe('should detect ambiguous language', () => {
