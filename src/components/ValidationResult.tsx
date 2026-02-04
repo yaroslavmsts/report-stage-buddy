@@ -1,8 +1,8 @@
-import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, DollarSign, Heart, FileText, AlertTriangle, HelpCircle } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, DollarSign, Heart, FileText, AlertTriangle, HelpCircle, MapPin } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo } from '@/lib/validationLogic';
+import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert } from '@/lib/validationLogic';
 
 interface ValidationResultProps {
   comparison: {
@@ -154,7 +154,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
           </AlertTitle>
           <AlertDescription className="mt-2 space-y-3">
             <p className="text-sm text-foreground">
-              The report contains contradictory terms regarding invasion status. Please verify manually.
+              The report contains contradictory or ambiguous terms regarding invasion status. Please verify manually.
             </p>
             
             {/* Highlighted conflicting sentences */}
@@ -171,7 +171,11 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
                     "{conflict.sentence}"
                   </p>
                   <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400 mt-1">
-                    Found: <span className="font-semibold">"{conflict.invasionKeyword}"</span> + <span className="font-semibold">"{conflict.negationKeyword}"</span> within 10-word proximity
+                    {conflict.conflictType === 'ambiguity' ? (
+                      <>⚠️ Ambiguous phrase: <span className="font-semibold">"{conflict.negationKeyword}"</span> suggests uncertainty about {conflict.invasionKeyword}</>
+                    ) : (
+                      <>Found: <span className="font-semibold">"{conflict.invasionKeyword}"</span> + <span className="font-semibold">"{conflict.negationKeyword}"</span> within 10-word proximity</>
+                    )}
                   </p>
                 </div>
               ))}
@@ -183,6 +187,45 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
                 <span className="font-semibold text-amber-600 dark:text-amber-400">⚠️ Conservative Staging Applied:</span> Due to the detected conflict, invasion-based staging overrides have been disabled. The calculated stage is based on tumor size only. Invasion status could not be safely determined.
               </p>
             </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* pT4 Override Alert */}
+      {parsedReport.pT4Override?.detected && (
+        <Alert className="border-2 border-destructive/50 bg-destructive/10">
+          <AlertTriangle className="h-5 w-5 text-destructive" />
+          <AlertTitle className="text-destructive font-semibold">
+            ⚠️ Anatomical Override: pT4 Structures Detected
+          </AlertTitle>
+          <AlertDescription className="mt-2">
+            <p className="text-sm text-foreground mb-2">
+              Invasion of the following critical structures was detected, which automatically assigns pT4 staging regardless of tumor size:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {parsedReport.pT4Override.structures.map((structure, index) => (
+                <span key={index} className="px-2 py-1 bg-destructive/20 text-destructive rounded text-xs font-medium">
+                  {structure}
+                </span>
+              ))}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Nodal Station Alerts */}
+      {parsedReport.nodalStationAlerts?.length > 0 && (
+        <Alert className="border-2 border-info/50 bg-info/10">
+          <MapPin className="h-5 w-5 text-info" />
+          <AlertTitle className="text-info font-semibold">
+            📍 Nodal Station Alert
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-2">
+            {parsedReport.nodalStationAlerts.map((alert, index) => (
+              <div key={index} className="p-2 rounded bg-info/10 border border-info/20">
+                <p className="text-xs sm:text-sm text-foreground">{alert.message}</p>
+              </div>
+            ))}
           </AlertDescription>
         </Alert>
       )}

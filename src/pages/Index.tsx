@@ -499,6 +499,19 @@ const Index = () => {
           {getStagingSource()}
         </div>
       </main>
+
+      {/* Professional Verification Footer - Permanent and Prominent */}
+      <footer className="border-t bg-muted/50 sticky bottom-0 z-10">
+        <div className="container mx-auto px-3 sm:px-4 py-3">
+          <div className="flex items-center justify-center gap-2 text-center">
+            <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+            <p className="text-xs sm:text-sm text-muted-foreground font-medium">
+              <span className="text-foreground">This tool is a clinical decision support aid for educational purposes</span>
+              {' '}and must be verified by a board-certified pathologist.
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };
