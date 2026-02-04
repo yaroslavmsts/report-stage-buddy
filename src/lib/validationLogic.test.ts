@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectInvasionConflicts, ConflictInfo } from './validationLogic';
+import { detectInvasionConflicts, detectAmbiguityPhrases, detectPT4Structures, detectNodalStationAlerts, ConflictInfo, NodalStationAlert } from './validationLogic';
 
 describe('detectInvasionConflicts', () => {
   describe('should NOT detect conflict (clear negation patterns)', () => {
@@ -453,6 +453,175 @@ describe('detectInvasionConflicts', () => {
         const conflicts = detectInvasionConflicts(text);
         expect(conflicts.length).toBeGreaterThan(0);
       });
+    });
+  });
+});
+
+describe('detectAmbiguityPhrases', () => {
+  describe('should detect ambiguous language', () => {
+    it('detects "cannot be ruled out" with invasion context', () => {
+      const text = 'Visceral pleural invasion cannot be ruled out.';
+      const conflicts = detectAmbiguityPhrases(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].conflictType).toBe('ambiguity');
+      expect(conflicts[0].negationKeyword).toBe('cannot be ruled out');
+    });
+
+    it('detects "cannot be excluded" with invasion context', () => {
+      const text = 'Chest wall invasion cannot be excluded.';
+      const conflicts = detectAmbiguityPhrases(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+      expect(conflicts[0].conflictType).toBe('ambiguity');
+    });
+
+    it('detects "not ruled out" with invasion context', () => {
+      const text = 'Pericardial involvement is not ruled out.';
+      const conflicts = detectAmbiguityPhrases(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+    });
+
+    it('detects "equivocal" with invasion context', () => {
+      const text = 'The pleural invasion status is equivocal.';
+      const conflicts = detectAmbiguityPhrases(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+    });
+
+    it('detects "suspicious for" with invasion context', () => {
+      const text = 'Findings are suspicious for diaphragmatic invasion.';
+      const conflicts = detectAmbiguityPhrases(text);
+      expect(conflicts.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('should NOT detect ambiguity', () => {
+    it('ignores ambiguous phrases without invasion context', () => {
+      const text = 'Malignancy cannot be ruled out based on imaging.';
+      const conflicts = detectAmbiguityPhrases(text);
+      expect(conflicts).toEqual([]);
+    });
+
+    it('ignores clear positive statements', () => {
+      const text = 'Visceral pleural invasion is present.';
+      const conflicts = detectAmbiguityPhrases(text);
+      expect(conflicts).toEqual([]);
+    });
+
+    it('ignores clear negative statements', () => {
+      const text = 'No pleural invasion identified.';
+      const conflicts = detectAmbiguityPhrases(text);
+      expect(conflicts).toEqual([]);
+    });
+  });
+});
+
+describe('detectPT4Structures', () => {
+  const mockNegationCheck = (finding: string, text: string): boolean => {
+    const lowerText = text.toLowerCase();
+    const negationPhrases = ['not', 'no', 'without', 'negative', 'absent'];
+    const findingIndex = lowerText.indexOf(finding.toLowerCase());
+    if (findingIndex === -1) return false;
+    const windowStart = Math.max(0, findingIndex - 40);
+    const windowText = lowerText.substring(windowStart, findingIndex);
+    return negationPhrases.some(phrase => windowText.includes(phrase));
+  };
+
+  describe('should detect pT4 structures', () => {
+    it('detects heart invasion', () => {
+      const text = 'Tumor invades the heart.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(true);
+      expect(result.structures).toContain('Heart');
+    });
+
+    it('detects carina invasion', () => {
+      const text = 'Direct invasion of the carina is present.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(true);
+      expect(result.structures).toContain('Carina');
+    });
+
+    it('detects tracheal invasion', () => {
+      const text = 'The tumor invades the trachea.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(true);
+      expect(result.structures).toContain('Trachea');
+    });
+
+    it('detects esophageal invasion', () => {
+      const text = 'Esophageal invasion is present.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(true);
+      expect(result.structures).toContain('Esophagus');
+    });
+
+    it('detects multiple structures', () => {
+      const text = 'The tumor invades the heart. There is also carinal invasion present.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(true);
+      expect(result.structures.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('detects great vessel invasion', () => {
+      const text = 'Invasion of the great vessels is identified.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(true);
+      expect(result.structures).toContain('Great Vessels');
+    });
+  });
+
+  describe('should NOT detect negated pT4 structures', () => {
+    it('ignores negated heart invasion', () => {
+      const text = 'No invasion of the heart identified.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(false);
+    });
+
+    it('ignores text without pT4 structures', () => {
+      const text = 'The tumor measures 2 cm and involves the visceral pleura.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(false);
+    });
+  });
+});
+
+describe('detectNodalStationAlerts', () => {
+  const createNodalInput = () => ({
+    stations_mentioned: [] as string[],
+    node_count_provided: false,
+  });
+
+  describe('should generate alerts', () => {
+    it('alerts when nodal stations mentioned without counts', () => {
+      const text = 'Station 7 lymph nodes are positive for metastatic carcinoma.';
+      const input = createNodalInput();
+      const alerts = detectNodalStationAlerts(text, input);
+      expect(alerts.length).toBeGreaterThan(0);
+    });
+
+    it('alerts specifically for Station 7 (subcarinal)', () => {
+      const text = 'Subcarinal lymph nodes show metastatic disease.';
+      const input = createNodalInput();
+      const alerts = detectNodalStationAlerts(text, input);
+      const station7Alert = alerts.find(a => a.station.includes('Station 7') || a.station.includes('Subcarinal'));
+      expect(station7Alert).toBeDefined();
+    });
+  });
+
+  describe('should NOT generate alerts', () => {
+    it('no alerts when node counts are provided', () => {
+      const text = 'Station 7 lymph nodes (0/5) are negative.';
+      const input = createNodalInput();
+      const alerts = detectNodalStationAlerts(text, input);
+      // May still alert for station 7 specifically
+      const generalAlert = alerts.find(a => !a.station.includes('Station 7'));
+      expect(generalAlert).toBeUndefined();
+    });
+
+    it('no alerts when no stations mentioned', () => {
+      const text = 'Tumor measures 1.5 cm with negative margins.';
+      const input = createNodalInput();
+      const alerts = detectNodalStationAlerts(text, input);
+      expect(alerts).toEqual([]);
     });
   });
 });

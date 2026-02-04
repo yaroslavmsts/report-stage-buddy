@@ -51,6 +51,22 @@ export interface ValidationInputs {
     has_total_lung_atelectasis: boolean;
     has_total_lung_pneumonitis: boolean;
   };
+  // pT4 anatomical structures
+  pT4_invasion: {
+    mediastinum: boolean;
+    heart: boolean;
+    great_vessels: boolean;
+    trachea: boolean;
+    recurrent_laryngeal_nerve: boolean;
+    esophagus: boolean;
+    vertebral_body: boolean;
+    carina: boolean;
+  };
+  // Nodal station findings
+  nodal_stations: {
+    stations_mentioned: string[];
+    node_count_provided: boolean;
+  };
 }
 
 export interface ValidationResult {
@@ -72,6 +88,13 @@ export interface ConflictInfo {
   negationKeyword: string;
   startIndex: number;
   endIndex: number;
+  conflictType: 'proximity' | 'ambiguity';
+}
+
+export interface NodalStationAlert {
+  station: string;
+  requiresNodeCount: boolean;
+  message: string;
 }
 
 export interface ParsedReport {
@@ -90,6 +113,8 @@ export interface ParsedReport {
   rawText: string;
   conflicts: ConflictInfo[];
   hasConflict: boolean;
+  nodalStationAlerts: NodalStationAlert[];
+  pT4Override: { detected: boolean; structures: string[] };
 }
 
 // ============================================
@@ -107,6 +132,30 @@ const INVASION_KEYWORDS = [
 const NEGATION_KEYWORDS = [
   'no', 'not', 'absent', 'intact', 'negative', 'without', 'none', 'free',
   'unremarkable', 'normal', 'preserved', 'denied', 'excluded'
+];
+
+// Ambiguity phrases that should trigger conflict warnings
+const AMBIGUITY_PHRASES = [
+  'cannot be ruled out',
+  'cannot be excluded',
+  'can not be ruled out',
+  'can not be excluded',
+  'not ruled out',
+  'not excluded',
+  'not entirely excluded',
+  'not completely ruled out',
+  'equivocal',
+  'indeterminate',
+  'uncertain',
+  'possible',
+  'suspicious for',
+  'suggestive of',
+  'concerning for',
+  'favor',
+  'favour',
+  'may represent',
+  'cannot exclude',
+  'cannot rule out',
 ];
 
 /**
@@ -175,7 +224,8 @@ export function detectInvasionConflicts(reportText: string): ConflictInfo[] {
             invasionKeyword: invasion.keyword,
             negationKeyword: negation.keyword,
             startIndex: startIndex >= 0 ? startIndex : currentIndex,
-            endIndex: startIndex >= 0 ? endIndex : currentIndex + sentence.length
+            endIndex: startIndex >= 0 ? endIndex : currentIndex + sentence.length,
+            conflictType: 'proximity'
           });
           
           // Only report one conflict per sentence to avoid duplicates
@@ -193,7 +243,226 @@ export function detectInvasionConflicts(reportText: string): ConflictInfo[] {
   return conflicts;
 }
 
-// Parse the pathology report text to extract relevant information
+/**
+ * Detects ambiguous phrases that indicate uncertainty about invasion status
+ * These should trigger conflict warnings for manual verification
+ */
+export function detectAmbiguityPhrases(reportText: string): ConflictInfo[] {
+  const conflicts: ConflictInfo[] = [];
+  const lowerText = reportText.toLowerCase();
+  
+  // Split into sentences
+  const sentences = reportText.split(/(?<=[.!?])\s+|(?<=\n)/);
+  let currentIndex = 0;
+  
+  for (const sentence of sentences) {
+    if (!sentence.trim()) {
+      currentIndex += sentence.length;
+      continue;
+    }
+    
+    const lowerSentence = sentence.toLowerCase();
+    
+    // Check for ambiguity phrases in context with invasion-related terms
+    for (const phrase of AMBIGUITY_PHRASES) {
+      if (lowerSentence.includes(phrase)) {
+        // Check if the sentence also mentions invasion-related terms
+        const invasionTerms = ['invasion', 'invade', 'pleural', 'pleura', 'chest wall', 
+          'pericardium', 'diaphragm', 'mediastinum', 'involvement'];
+        
+        const hasInvasionContext = invasionTerms.some(term => lowerSentence.includes(term));
+        
+        if (hasInvasionContext) {
+          const startIndex = reportText.indexOf(sentence.trim(), currentIndex);
+          const endIndex = startIndex + sentence.trim().length;
+          
+          conflicts.push({
+            sentence: sentence.trim(),
+            invasionKeyword: invasionTerms.find(t => lowerSentence.includes(t)) || 'invasion',
+            negationKeyword: phrase,
+            startIndex: startIndex >= 0 ? startIndex : currentIndex,
+            endIndex: startIndex >= 0 ? endIndex : currentIndex + sentence.length,
+            conflictType: 'ambiguity'
+          });
+          break; // One conflict per sentence
+        }
+      }
+    }
+    
+    currentIndex += sentence.length;
+  }
+  
+  return conflicts;
+}
+
+/**
+ * Detects pT4 anatomical structures that automatically assign pT4 staging
+ */
+export function detectPT4Structures(
+  reportText: string, 
+  isNegatedFinding: (finding: string, text: string) => boolean
+): { detected: boolean; structures: string[] } {
+  const text = reportText.toLowerCase();
+  const detectedStructures: string[] = [];
+  
+  const pT4Patterns: Record<string, { patterns: RegExp[], display: string }> = {
+    mediastinum: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?mediastinum/i,
+        /mediastinal\s*invasion/i,
+        /direct\s*invasion\s*(of|into)\s*(the\s*)?mediastinum/i,
+      ],
+      display: 'Mediastinum'
+    },
+    heart: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?heart/i,
+        /cardiac\s*invasion/i,
+        /direct\s*invasion\s*(of|into)\s*(the\s*)?heart/i,
+        /involves?\s*(the\s*)?heart/i,
+      ],
+      display: 'Heart'
+    },
+    great_vessels: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?great\s*vessels?/i,
+        /great\s*vessel(s)?\s*invasion/i,
+        /invasion\s*(of|into)\s*(the\s*)?great\s*vessels?/i,
+        /invad(es?|ing|ed)\s*(the\s*)?(aorta|pulmonary\s*artery|vena\s*cava)/i,
+        /aortic\s*invasion/i,
+      ],
+      display: 'Great Vessels'
+    },
+    trachea: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?trachea/i,
+        /tracheal\s*invasion/i,
+        /direct\s*invasion\s*(of|into)\s*(the\s*)?trachea/i,
+      ],
+      display: 'Trachea'
+    },
+    recurrent_laryngeal_nerve: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?recurrent\s*laryngeal\s*nerve/i,
+        /recurrent\s*laryngeal\s*nerve\s*invasion/i,
+        /recurrent\s*laryngeal\s*nerve\s*involvement/i,
+      ],
+      display: 'Recurrent Laryngeal Nerve'
+    },
+    esophagus: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?esophagus/i,
+        /esophageal\s*invasion/i,
+        /direct\s*invasion\s*(of|into)\s*(the\s*)?esophagus/i,
+      ],
+      display: 'Esophagus'
+    },
+    vertebral_body: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?vertebra(l\s*body|e)?/i,
+        /vertebral\s*(body\s*)?invasion/i,
+        /spine\s*invasion/i,
+        /direct\s*invasion\s*(of|into)\s*(the\s*)?vertebra/i,
+      ],
+      display: 'Vertebral Body'
+    },
+    carina: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?carina/i,
+        /carinal\s*invasion/i,
+        /invasion\s*(of|into)\s*(the\s*)?carina/i,
+        /tumor\s*(at|involves?|invad(es?|ing))\s*(the\s*)?carina/i,
+        /less\s*than\s*2\s*cm\s*(from\s*)?(the\s*)?carina/i,
+        /direct\s*invasion\s*(of|into)\s*(the\s*)?carina/i,
+      ],
+      display: 'Carina'
+    },
+    diaphragm: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?diaphragm/i,
+        /diaphragm(atic)?\s*invasion/i,
+        /direct\s*invasion\s*(of|into)\s*(the\s*)?diaphragm/i,
+      ],
+      display: 'Diaphragm'
+    },
+  };
+  
+  for (const [key, config] of Object.entries(pT4Patterns)) {
+    for (const pattern of config.patterns) {
+      if (pattern.test(text)) {
+        // Check if negated
+        if (!isNegatedFinding(key.replace(/_/g, ' '), text)) {
+          detectedStructures.push(config.display);
+          break;
+        }
+      }
+    }
+  }
+  
+  return {
+    detected: detectedStructures.length > 0,
+    structures: detectedStructures
+  };
+}
+
+/**
+ * Detects nodal station mentions and generates alerts for missing node counts
+ */
+export function detectNodalStationAlerts(
+  reportText: string,
+  nodalStationsInput: ValidationInputs['nodal_stations']
+): NodalStationAlert[] {
+  const alerts: NodalStationAlert[] = [];
+  const text = reportText.toLowerCase();
+  
+  // Nodal station patterns (IASLC lymph node map stations 1-14)
+  const stationPatterns = [
+    { pattern: /station\s*(\d{1,2})/gi, name: 'Station' },
+    { pattern: /level\s*(\d{1,2})/gi, name: 'Level' },
+    { pattern: /\b(subcarinal|paratracheal|hilar|aortopulmonary|subaortic|para-aortic|paraesophageal|pulmonary\s*ligament|interlobar|lobar|segmental)/gi, name: 'Named station' },
+  ];
+  
+  const mentionedStations: string[] = [];
+  
+  for (const { pattern } of stationPatterns) {
+    const matches = text.matchAll(pattern);
+    for (const match of matches) {
+      mentionedStations.push(match[0]);
+    }
+  }
+  
+  // Update the input to track mentioned stations
+  nodalStationsInput.stations_mentioned = [...new Set(mentionedStations)];
+  
+  // Check if node counts are provided (e.g., "0/3", "2/5 positive")
+  const nodeCountPattern = /(\d+)\s*\/\s*(\d+)/g;
+  const hasNodeCounts = nodeCountPattern.test(text);
+  nodalStationsInput.node_count_provided = hasNodeCounts;
+  
+  // Generate alerts for specific stations without node counts
+  if (mentionedStations.length > 0 && !hasNodeCounts) {
+    alerts.push({
+      station: mentionedStations.join(', '),
+      requiresNodeCount: true,
+      message: `Nodal stations mentioned (${mentionedStations.join(', ')}) but total nodes examined not specified. Please confirm node counts for accurate prognostic assessment.`
+    });
+  }
+  
+  // Special alert for Station 7 (subcarinal) - important prognostic station
+  if (text.includes('station 7') || text.includes('subcarinal')) {
+    const hasStation7Count = /station\s*7[^.]*(\d+)\s*\/\s*(\d+)/i.test(text) || 
+                             /subcarinal[^.]*(\d+)\s*\/\s*(\d+)/i.test(text);
+    if (!hasStation7Count) {
+      alerts.push({
+        station: 'Station 7 (Subcarinal)',
+        requiresNodeCount: true,
+        message: 'Station 7 (subcarinal) lymph nodes have significant prognostic impact. Please confirm the number of nodes examined at this station.'
+      });
+    }
+  }
+  
+  return alerts;
+}
 export function parsePathologyReport(reportText: string): ParsedReport {
   const text = reportText.toLowerCase();
   
@@ -228,6 +497,20 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     atelectasis: {
       has_total_lung_atelectasis: false,
       has_total_lung_pneumonitis: false,
+    },
+    pT4_invasion: {
+      mediastinum: false,
+      heart: false,
+      great_vessels: false,
+      trachea: false,
+      recurrent_laryngeal_nerve: false,
+      esophagus: false,
+      vertebral_body: false,
+      carina: false,
+    },
+    nodal_stations: {
+      stations_mentioned: [],
+      node_count_provided: false,
     },
   };
 
@@ -731,6 +1014,20 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   // ============================================
   // Detect invasion + negation keywords within 10-word proximity
   const conflicts = detectInvasionConflicts(reportText);
+  
+  // Detect ambiguous phrases that require manual verification
+  const ambiguityConflicts = detectAmbiguityPhrases(reportText);
+  const allConflicts = [...conflicts, ...ambiguityConflicts];
+
+  // ============================================
+  // pT4 ANATOMICAL OVERRIDE DETECTION
+  // ============================================
+  const pT4Structures = detectPT4Structures(reportText, isNegatedFinding);
+  
+  // ============================================
+  // NODAL STATION ALERTS
+  // ============================================
+  const nodalStationAlerts = detectNodalStationAlerts(reportText, inputs.nodal_stations);
 
   return { 
     inputs, 
@@ -739,8 +1036,10 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     reportedNStage, 
     reportedMStage, 
     rawText: reportText,
-    conflicts,
-    hasConflict: conflicts.length > 0
+    conflicts: allConflicts,
+    hasConflict: allConflicts.length > 0,
+    nodalStationAlerts,
+    pT4Override: pT4Structures,
   };
 }
 
@@ -874,6 +1173,31 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
       'golden_rule',
       undefined,
       `⚠️ GOLDEN RULE: ${condition} detected. Per AJCC 8th Edition, a tumor of any size causing collapse of the entire lung is automatically staged as pT2.`
+    );
+  }
+
+  // ANATOMICAL OVERRIDE: pT4 structures
+  // Invasion of specific anatomical structures automatically assigns pT4
+  const pT4Structures = detectPT4Structures(rawText, (finding: string, text: string): boolean => {
+    // Inline negation check for pT4 detection
+    const normalizedText = text.toLowerCase();
+    const normalizedFinding = finding.toLowerCase();
+    const negationPhrases = ['not', 'no', 'without', 'negative', 'absent', 'intact', 'free'];
+    const findingIndex = normalizedText.indexOf(normalizedFinding);
+    if (findingIndex === -1) return false;
+    const windowStart = Math.max(0, findingIndex - 40);
+    const windowText = normalizedText.substring(windowStart, findingIndex);
+    return negationPhrases.some(phrase => windowText.includes(phrase));
+  });
+  
+  if (!hasConflict && pT4Structures.detected) {
+    const structureList = pT4Structures.structures.join(', ');
+    return buildResult(
+      'applicable',
+      'pT4',
+      'anatomical_override',
+      undefined,
+      `⚠️ ANATOMICAL OVERRIDE: Invasion of ${structureList} detected. Per AJCC 8th Edition, invasion of these structures automatically assigns pT4 regardless of tumor size.`
     );
   }
 
