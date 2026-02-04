@@ -228,9 +228,10 @@ PRIMARY TUMOR:
 - Tumor size: 2.1 cm in greatest dimension
 - Histologic type: Invasive adenocarcinoma, acinar predominant
 
-SEPARATE NODULE:
-- A separate tumor nodule was identified in the right lower lobe (RLL), measuring 0.8 cm
-- Histologically consistent with the primary tumor
+SEPARATE NODULE IN DIFFERENT IPSILATERAL LOBE:
+- A separate tumor nodule of the same histologic type is identified in the right lower lobe (RLL)
+- Size: 0.8 cm
+- Histologically identical to the primary tumor
 
 VISCERAL PLEURAL INVASION: Absent (PL0)
 
@@ -243,11 +244,13 @@ LYMPH NODES:
 PATHOLOGIC STAGE: pT1c pN0
 
 MICROSCOPIC DESCRIPTION:
-The primary tumor in the RUL measures 2.1 cm with acinar growth pattern. A separate 0.8 cm tumor nodule is present in the RLL (different ipsilateral lobe). Both lesions show identical morphology consistent with intrapulmonary spread from a single primary.
+The primary tumor in the RUL measures 2.1 cm with acinar growth pattern. A separate tumor nodule is present in the RLL (different ipsilateral lobe). Both lesions show identical morphology consistent with intrapulmonary spread.
 
-Per AJCC 8th Edition: A separate tumor nodule in a different lobe of the SAME lung (ipsilateral) is classified as pT4.
+IPSILATERAL LOBE MAP: 
+- Right Lung = [RUL, RML, RLL] 
+- Left Lung = [LUL, LLL]
 
-LOBE MAP: Right Lung = RUL, RML, RLL | Left Lung = LUL, LLL
+Per AJCC 8th Edition: A separate tumor nodule of the same histologic type in a different lobe of the SAME lung automatically assigns pT4 staging regardless of tumor size.
 
 NOTE: The reported pT1c is INCORRECT - the separate nodule in RLL (same lung, different lobe) mandates pT4 staging.`
   },
