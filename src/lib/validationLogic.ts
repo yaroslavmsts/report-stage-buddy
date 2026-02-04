@@ -1,4 +1,4 @@
-// AJCC 8th Edition Lung Cancer pT Staging Validation Engine
+// AJCC 8th Edition Lung Cancer Full TNM Staging Validation Engine
 // Uses STAGING_RULES as the Source of Truth
 
 import { 
@@ -7,7 +7,12 @@ import {
   getRulesWithOverrides, 
   getSizeBasedStage,
   matchesOverride,
-  type StagingRule 
+  getNodeStage,
+  getMetastasisStage,
+  getStageGroup,
+  getICD10Code,
+  type StagingRule,
+  type ICD10Code
 } from './stagingRules';
 
 export { getStagingSource };
@@ -49,6 +54,10 @@ export interface ValidationInputs {
 export interface ValidationResult {
   applicability: 'applicable' | 'not_applicable' | 'indeterminate' | 'outside_scope';
   t_category: string | null;
+  n_category: string | null;
+  m_category: string | null;
+  stage_group: string | null;
+  icd10: ICD10Code | null;
   basis?: string;
   size_basis_cm?: number | null;
   reason: string;
@@ -60,8 +69,14 @@ export interface ParsedReport {
     histologyFindings: string[];
     measurementFindings: string[];
     stageFindings: string[];
+    lymphNodeFindings: string[];
+    metastasisFindings: string[];
+    siteFindings: string[];
   };
   reportedStage: string | null;
+  reportedNStage: string | null;
+  reportedMStage: string | null;
+  rawText: string;
 }
 
 // Parse the pathology report text to extract relevant information
@@ -106,7 +121,13 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     histologyFindings: [] as string[],
     measurementFindings: [] as string[],
     stageFindings: [] as string[],
+    lymphNodeFindings: [] as string[],
+    metastasisFindings: [] as string[],
+    siteFindings: [] as string[],
   };
+
+  let reportedNStage: string | null = null;
+  let reportedMStage: string | null = null;
 
   // Check for AIS (Adenocarcinoma in situ)
   if (
@@ -397,16 +418,70 @@ export function parsePathologyReport(reportText: string): ParsedReport {
       if (!reportedStage.startsWith('P')) {
         reportedStage = 'P' + reportedStage;
       }
-      extractedText.stageFindings.push(`Reported stage: ${reportedStage}`);
+      extractedText.stageFindings.push(`Reported pT stage: ${reportedStage}`);
       break;
     }
   }
 
-  return { inputs, extractedText, reportedStage };
+  // Extract reported pN stage
+  const nStagePatterns = [
+    /\b(pn[0-3])\b/i,
+    /regional\s*lymph\s*nodes?[:\s]*(pn[0-3])/i,
+    /\bn:\s*(pn?[0-3])/i,
+  ];
+
+  for (const pattern of nStagePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      reportedNStage = match[1].toUpperCase();
+      if (!reportedNStage.startsWith('P')) {
+        reportedNStage = 'P' + reportedNStage;
+      }
+      extractedText.stageFindings.push(`Reported pN stage: ${reportedNStage}`);
+      break;
+    }
+  }
+
+  // Extract reported pM stage
+  const mStagePatterns = [
+    /\b(pm[0-1][a-c]?)\b/i,
+    /distant\s*metastasis[:\s]*(pm?[0-1][a-c]?)/i,
+    /\bm:\s*(pm?[0-1][a-c]?)/i,
+  ];
+
+  for (const pattern of mStagePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      reportedMStage = match[1].toUpperCase();
+      if (!reportedMStage.startsWith('P')) {
+        reportedMStage = 'P' + reportedMStage;
+      }
+      extractedText.stageFindings.push(`Reported pM stage: ${reportedMStage}`);
+      break;
+    }
+  }
+
+  // Extract lymph node findings for pN calculation
+  const lymphNodeResult = getNodeStage(reportText);
+  if (lymphNodeResult) {
+    extractedText.lymphNodeFindings.push(`${lymphNodeResult.stage}: ${lymphNodeResult.criteria}`);
+  }
+
+  // Extract metastasis findings for pM calculation
+  const metastasisResult = getMetastasisStage(reportText);
+  if (metastasisResult) {
+    extractedText.metastasisFindings.push(`${metastasisResult.stage}: ${metastasisResult.criteria}`);
+  }
+
+  // Extract tumor site for ICD-10
+  const icd10Result = getICD10Code(reportText);
+  extractedText.siteFindings.push(`${icd10Result.site} (${icd10Result.code})`);
+
+  return { inputs, extractedText, reportedStage, reportedNStage, reportedMStage, rawText: reportText };
 }
 
-// Run the decision tree validation
-export function runValidation(inputs: ValidationInputs): ValidationResult {
+// Run the decision tree validation - now includes full TNM
+export function runValidation(inputs: ValidationInputs, rawText: string = ''): ValidationResult {
   // Calculate derived values
   let estimated_invasive_size_cm: number | null = null;
   if (
@@ -437,7 +512,15 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
     size_basis_cm = inputs.measurements_cm.greatest_dimension_cm;
   }
 
-// Decision tree traversal using STAGING_RULES as Source of Truth
+  // Calculate N and M stages from raw text
+  const nResult = getNodeStage(rawText);
+  const mResult = getMetastasisStage(rawText);
+  const icd10Result = getICD10Code(rawText);
+  
+  const n_category = nResult?.stage || 'pN0';
+  const m_category = mResult?.stage || 'pM0';
+
+  // Decision tree traversal using STAGING_RULES as Source of Truth
   // Get override rules sorted by priority
   const overrideRules = getRulesWithOverrides();
   
@@ -467,33 +550,63 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
   if (inputs.direct_invasion.diaphragm) findings.push('diaphragm');
   if (inputs.direct_invasion.main_bronchus) findings.push('main bronchus');
 
+  // Helper to build result with full TNM
+  const buildResult = (
+    applicability: ValidationResult['applicability'],
+    t_category: string | null,
+    basis: string | undefined,
+    size_basis_cm_val: number | null | undefined,
+    reason: string
+  ): ValidationResult => {
+    const stage_group = t_category 
+      ? getStageGroup(t_category, n_category, m_category)
+      : null;
+    
+    return {
+      applicability,
+      t_category,
+      n_category,
+      m_category,
+      stage_group,
+      icd10: icd10Result,
+      basis,
+      size_basis_cm: size_basis_cm_val ?? undefined,
+      reason,
+    };
+  };
+
   // STEP 1: Check for special histology types (pTis, pT1mi)
   if (inputs.histology.is_AIS) {
-    return {
-      applicability: 'not_applicable',
-      t_category: 'pTis(AIS)',
-      reason: `${getStagingSource()}: Adenocarcinoma in situ is staged as pTis(AIS).`,
-    };
+    return buildResult(
+      'not_applicable',
+      'pTis(AIS)',
+      undefined,
+      undefined,
+      `${getStagingSource()}: Adenocarcinoma in situ is staged as pTis(AIS).`
+    );
   }
 
   if (inputs.histology.is_MIA) {
-    return {
-      applicability: 'not_applicable',
-      t_category: 'pT1mi',
-      reason: `${getStagingSource()}: Minimally invasive adenocarcinoma is staged as pT1mi.`,
-    };
+    return buildResult(
+      'not_applicable',
+      'pT1mi',
+      undefined,
+      undefined,
+      `${getStagingSource()}: Minimally invasive adenocarcinoma is staged as pT1mi.`
+    );
   }
 
   // GOLDEN RULE #3: Atelectasis/Pneumonitis
   // Total lung collapse automatically upgrades to pT2
   if (inputs.atelectasis.has_total_lung_atelectasis || inputs.atelectasis.has_total_lung_pneumonitis) {
     const condition = inputs.atelectasis.has_total_lung_atelectasis ? 'total lung atelectasis' : 'total lung pneumonitis';
-    return {
-      applicability: 'applicable',
-      t_category: 'pT2',
-      basis: 'golden_rule',
-      reason: `⚠️ GOLDEN RULE: ${condition} detected. Per AJCC 8th Edition, a tumor of any size causing collapse of the entire lung is automatically staged as pT2.`,
-    };
+    return buildResult(
+      'applicable',
+      'pT2',
+      'golden_rule',
+      undefined,
+      `⚠️ GOLDEN RULE: ${condition} detected. Per AJCC 8th Edition, a tumor of any size causing collapse of the entire lung is automatically staged as pT2.`
+    );
   }
 
   // STEP 2: Check OVERRIDE rules in priority order (before size-based staging)
@@ -503,18 +616,13 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
     if (rule.overrides) {
       for (const finding of findings) {
         if (matchesOverride(finding, rule.overrides)) {
-          // Build descriptive reason
-          const matchedOverride = rule.overrides.find(o => 
-            finding.toLowerCase().includes(o.toLowerCase()) || 
-            o.toLowerCase().includes(finding.toLowerCase())
+          return buildResult(
+            'applicable',
+            rule.stage,
+            'override',
+            undefined,
+            `${getStagingSource()}: ${finding.toUpperCase()} is present. Per staging criteria: "${rule.criteria}". This overrides tumor size-based staging.`
           );
-          
-          return {
-            applicability: 'applicable',
-            t_category: rule.stage,
-            basis: 'override',
-            reason: `${getStagingSource()}: ${finding.toUpperCase()} is present. Per staging criteria: "${rule.criteria}". This overrides tumor size-based staging.`,
-          };
         }
       }
     }
@@ -525,44 +633,47 @@ export function runValidation(inputs: ValidationInputs): ValidationResult {
     inputs.superficial_spreading.is_superficial_spreading_tumor &&
     inputs.superficial_spreading.invasive_component_limited_to_bronchial_wall
   ) {
-    return {
-      applicability: 'applicable',
-      t_category: 'pT1a',
-      basis: 'override',
-      reason: `${getStagingSource()}: Superficial spreading tumor with invasive component limited to bronchial wall is classified as pT1a regardless of overall size.`,
-    };
+    return buildResult(
+      'applicable',
+      'pT1a',
+      'override',
+      undefined,
+      `${getStagingSource()}: Superficial spreading tumor with invasive component limited to bronchial wall is classified as pT1a regardless of overall size.`
+    );
   }
 
   // STEP 4: Validate size basis is present for size-based staging
   if (size_basis_cm === null) {
-    return {
-      applicability: 'indeterminate',
-      t_category: null,
-      reason: 'No tumor size measurements could be extracted from the report. Please ensure the report includes size information (e.g., "0.8 cm tumor" or "tumor size: 1.2 cm").',
-    };
+    return buildResult(
+      'indeterminate',
+      null,
+      undefined,
+      undefined,
+      'No tumor size measurements could be extracted from the report. Please ensure the report includes size information (e.g., "0.8 cm tumor" or "tumor size: 1.2 cm").'
+    );
   }
 
   // STEP 5: Size-based staging using rules database
   const sizeRule = getSizeBasedStage(size_basis_cm);
   
   if (sizeRule) {
-    return {
-      applicability: 'applicable',
-      t_category: sizeRule.stage,
-      basis: 'size_basis_cm',
-      size_basis_cm: size_basis_cm,
-      reason: `${getStagingSource()}: ${sizeRule.criteria}. Measured size: ${size_basis_cm} cm.`,
-    };
+    return buildResult(
+      'applicable',
+      sizeRule.stage,
+      'size_basis_cm',
+      size_basis_cm,
+      `${getStagingSource()}: ${sizeRule.criteria}. Measured size: ${size_basis_cm} cm.`
+    );
   }
 
   // Fallback - should not reach here given the logic above
-  return {
-    applicability: 'outside_scope',
-    t_category: null,
-    basis: 'size_basis_cm',
-    size_basis_cm: size_basis_cm,
-    reason: 'Unable to determine pT category from the available information.',
-  };
+  return buildResult(
+    'outside_scope',
+    null,
+    'size_basis_cm',
+    size_basis_cm,
+    'Unable to determine pT category from the available information.'
+  );
 }
 
 // Build descriptive reasoning for auto-calculated results
