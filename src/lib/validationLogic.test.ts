@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectInvasionConflicts, detectAmbiguityPhrases, detectPT4Structures, detectNodalStationAlerts, ConflictInfo, NodalStationAlert } from './validationLogic';
+import { detectInvasionConflicts, detectAmbiguityPhrases, detectPT4Structures, detectNodalStationAlerts, detectMarginStatus, detectMultiplePrimaryTumors, ConflictInfo, NodalStationAlert, MarginAlert } from './validationLogic';
 
 describe('detectInvasionConflicts', () => {
   describe('should NOT detect conflict (clear negation patterns)', () => {
@@ -427,12 +427,29 @@ describe('detectInvasionConflicts', () => {
       });
     });
 
-    describe('boundary cases for 10-word proximity', () => {
-      it('exactly 10 words between invasion and negation', () => {
+    describe('5-word proximity threshold (upgraded from 10)', () => {
+      it('exactly 5 words between invasion and negation - triggers proximity conflict', () => {
+        // Word positions: no(0) a(1) b(2) c(3) d(4) invasion(5)
+        const text = 'No a b c d invasion.';
+        const conflicts = detectInvasionConflicts(text);
+        expect(conflicts.length).toBeGreaterThan(0);
+        expect(conflicts[0].conflictType).toBe('proximity');
+      });
+
+      it('6 words between invasion and negation - triggers ambiguity conflict', () => {
+        // Word positions: no(0) a(1) b(2) c(3) d(4) e(5) invasion(6)
+        const text = 'No a b c d e invasion.';
+        const conflicts = detectInvasionConflicts(text);
+        expect(conflicts.length).toBeGreaterThan(0);
+        expect(conflicts[0].conflictType).toBe('ambiguity');
+      });
+
+      it('10 words between invasion and negation - still triggers ambiguity', () => {
         // Word positions: no(0) a(1) b(2) c(3) d(4) e(5) f(6) g(7) h(8) i(9) invasion(10)
         const text = 'No a b c d e f g h i invasion.';
         const conflicts = detectInvasionConflicts(text);
         expect(conflicts.length).toBeGreaterThan(0);
+        expect(conflicts[0].conflictType).toBe('ambiguity');
       });
 
       it('11 words between invasion and negation - no conflict', () => {
@@ -442,14 +459,14 @@ describe('detectInvasionConflicts', () => {
         expect(conflicts).toEqual([]);
       });
 
-      it('invasion before negation within 10 words', () => {
-        const text = 'Pleural invasion is a b c d e f absent.';
+      it('invasion before negation within 5 words - proximity conflict', () => {
+        const text = 'Pleural invasion is a absent.';
         const conflicts = detectInvasionConflicts(text);
         expect(conflicts.length).toBeGreaterThan(0);
       });
 
-      it('negation before invasion within 10 words', () => {
-        const text = 'No evidence of a b c d pleural invasion.';
+      it('negation before invasion within 5 words - proximity conflict', () => {
+        const text = 'No evidence of pleural invasion.';
         const conflicts = detectInvasionConflicts(text);
         expect(conflicts.length).toBeGreaterThan(0);
       });
@@ -622,6 +639,95 @@ describe('detectNodalStationAlerts', () => {
       const input = createNodalInput();
       const alerts = detectNodalStationAlerts(text, input);
       expect(alerts).toEqual([]);
+    });
+  });
+});
+
+describe('detectMarginStatus', () => {
+  describe('should detect involved margins', () => {
+    it('detects "margin positive"', () => {
+      const text = 'Bronchial margin positive for carcinoma.';
+      const alerts = detectMarginStatus(text);
+      expect(alerts.length).toBeGreaterThan(0);
+      expect(alerts[0].status).toBe('involved');
+    });
+
+    it('detects "margin is involved"', () => {
+      const text = 'The resection margin is involved by tumor.';
+      const alerts = detectMarginStatus(text);
+      expect(alerts.length).toBeGreaterThan(0);
+      expect(alerts[0].status).toBe('involved');
+    });
+
+    it('detects "tumor at margin"', () => {
+      const text = 'Tumor extends to the margin.';
+      const alerts = detectMarginStatus(text);
+      expect(alerts.length).toBeGreaterThan(0);
+      expect(alerts[0].status).toBe('involved');
+    });
+  });
+
+  describe('should detect close margins', () => {
+    it('detects "close margin"', () => {
+      const text = 'Close margin identified. Clearance 2mm.';
+      const alerts = detectMarginStatus(text);
+      expect(alerts.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('should NOT alert for negative margins', () => {
+    it('no alert for "margins negative"', () => {
+      const text = 'All margins are negative for tumor.';
+      const alerts = detectMarginStatus(text);
+      expect(alerts).toEqual([]);
+    });
+
+    it('no alert for "margins uninvolved"', () => {
+      const text = 'Surgical margins uninvolved by carcinoma.';
+      const alerts = detectMarginStatus(text);
+      expect(alerts).toEqual([]);
+    });
+  });
+});
+
+describe('detectMultiplePrimaryTumors', () => {
+  describe('should detect multiple primaries', () => {
+    it('detects "multiple tumors"', () => {
+      const result = detectMultiplePrimaryTumors('Multiple tumors identified in the left upper lobe.');
+      expect(result).toBe(true);
+    });
+
+    it('detects "two separate nodules"', () => {
+      // Pattern now includes optional "separate" before "primary"
+      const result = detectMultiplePrimaryTumors('Two distinct nodules measuring 1.2 cm and 0.8 cm.');
+      expect(result).toBe(true);
+    });
+
+    it('detects "synchronous primary tumors"', () => {
+      const result = detectMultiplePrimaryTumors('Synchronous primary tumors present in bilateral lungs.');
+      expect(result).toBe(true);
+    });
+
+    it('detects "multifocal adenocarcinoma"', () => {
+      const result = detectMultiplePrimaryTumors('Multifocal adenocarcinoma with predominant lepidic pattern.');
+      expect(result).toBe(true);
+    });
+
+    it('detects "Tumor #1" numbering', () => {
+      const result = detectMultiplePrimaryTumors('Tumor #1: 1.5 cm. Tumor #2: 0.9 cm.');
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('should NOT detect single tumors', () => {
+    it('single tumor report', () => {
+      const result = detectMultiplePrimaryTumors('Single tumor measuring 1.5 cm in greatest dimension.');
+      expect(result).toBe(false);
+    });
+
+    it('standard pathology report without multiple primaries', () => {
+      const result = detectMultiplePrimaryTumors('Invasive adenocarcinoma, acinar predominant. Tumor size 2.0 cm.');
+      expect(result).toBe(false);
     });
   });
 });

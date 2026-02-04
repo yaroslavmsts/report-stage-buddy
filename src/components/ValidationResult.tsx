@@ -1,8 +1,8 @@
-import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, DollarSign, Heart, FileText, AlertTriangle, HelpCircle, MapPin } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, DollarSign, Heart, FileText, AlertTriangle, HelpCircle, MapPin, Scissors } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert } from '@/lib/validationLogic';
+import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert } from '@/lib/validationLogic';
 
 interface ValidationResultProps {
   comparison: {
@@ -226,6 +226,64 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
                 <p className="text-xs sm:text-sm text-foreground">{alert.message}</p>
               </div>
             ))}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Margin Alert - HIGH PRIORITY */}
+      {parsedReport.marginAlerts?.length > 0 && (
+        <Alert className={`border-2 ${parsedReport.marginAlerts.some(a => a.status === 'involved') ? 'border-destructive/70 bg-destructive/15' : 'border-amber-500/50 bg-amber-500/10'}`}>
+          <Scissors className={`h-5 w-5 ${parsedReport.marginAlerts.some(a => a.status === 'involved') ? 'text-destructive' : 'text-amber-500'}`} />
+          <AlertTitle className={`font-semibold ${parsedReport.marginAlerts.some(a => a.status === 'involved') ? 'text-destructive' : 'text-amber-600 dark:text-amber-400'}`}>
+            🚨 Margin Status Alert
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-2">
+            {parsedReport.marginAlerts.map((alert, index) => (
+              <div key={index} className={`p-2 rounded border ${alert.status === 'involved' ? 'bg-destructive/10 border-destructive/30' : 'bg-amber-500/10 border-amber-500/20'}`}>
+                <p className="text-xs sm:text-sm text-foreground font-medium mb-1">
+                  Found: "{alert.margin}"
+                </p>
+                <p className="text-xs text-foreground">{alert.message}</p>
+              </div>
+            ))}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Invasive Size Missing Alert for Nonmucinous Adenocarcinomas */}
+      {parsedReport.invasiveSizeMissing && (
+        <Alert className="border-2 border-amber-500/50 bg-amber-500/10">
+          <AlertTriangle className="h-5 w-5 text-amber-500" />
+          <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold">
+            ⚠️ Invasive Size Required
+          </AlertTitle>
+          <AlertDescription className="mt-2">
+            <p className="text-sm text-foreground">
+              This report describes a <strong>nonmucinous adenocarcinoma with lepidic component</strong>. 
+              Per CAP Note A, the <strong>invasive component size</strong> (not total tumor size) must be used for T-staging.
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Please ensure the report includes either:
+            </p>
+            <ul className="text-xs text-muted-foreground mt-1 list-disc list-inside space-y-1">
+              <li>Invasive component size (e.g., "invasive component: 0.8 cm")</li>
+              <li>Percentage of invasion (e.g., "60% invasive pattern")</li>
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Multiple Primary Tumors Badge */}
+      {parsedReport.multiplePrimaryTumors && (
+        <Alert className="border-2 border-info/50 bg-info/10">
+          <Info className="h-5 w-5 text-info" />
+          <AlertTitle className="text-info font-semibold">
+            Multiple Primary Tumors Detected - (m) Suffix Applied
+          </AlertTitle>
+          <AlertDescription className="mt-2">
+            <p className="text-sm text-foreground">
+              The report indicates multiple primary tumors. Per AJCC standards, the "(m)" suffix has been appended to the T-category (e.g., pT1b(m)).
+            </p>
           </AlertDescription>
         </Alert>
       )}

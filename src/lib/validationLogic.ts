@@ -97,6 +97,12 @@ export interface NodalStationAlert {
   message: string;
 }
 
+export interface MarginAlert {
+  margin: string;
+  status: 'involved' | 'close';
+  message: string;
+}
+
 export interface ParsedReport {
   inputs: ValidationInputs;
   extractedText: {
@@ -115,6 +121,9 @@ export interface ParsedReport {
   hasConflict: boolean;
   nodalStationAlerts: NodalStationAlert[];
   pT4Override: { detected: boolean; structures: string[] };
+  marginAlerts: MarginAlert[];
+  multiplePrimaryTumors: boolean;
+  invasiveSizeMissing: boolean;
 }
 
 // ============================================
@@ -158,8 +167,12 @@ const AMBIGUITY_PHRASES = [
   'cannot rule out',
 ];
 
+// Word proximity threshold for conflict detection
+const CONFLICT_PROXIMITY_THRESHOLD = 5;
+
 /**
- * Detects sentences containing both invasion and negation keywords within 10-word proximity
+ * Detects sentences containing both invasion and negation keywords within 5-word proximity
+ * If distance > 5 words, flags as "Ambiguous" rather than direct conflict
  * This is a safety layer to flag potentially contradictory language
  */
 export function detectInvasionConflicts(reportText: string): ConflictInfo[] {
@@ -210,14 +223,17 @@ export function detectInvasionConflicts(reportText: string): ConflictInfo[] {
       }
     }
     
-    // Check for any invasion-negation pairs within 10-word proximity
+    // Check for any invasion-negation pairs
+    // Within 5 words = proximity conflict, 6-10 words = ambiguous
     for (const invasion of invasionPositions) {
       for (const negation of negationPositions) {
         const distance = Math.abs(invasion.wordIndex - negation.wordIndex);
         if (distance <= 10) {
-          // Found a conflict!
           const startIndex = reportText.indexOf(sentence.trim(), currentIndex);
           const endIndex = startIndex + sentence.trim().length;
+          
+          // Determine conflict type based on distance
+          const conflictType = distance <= CONFLICT_PROXIMITY_THRESHOLD ? 'proximity' : 'ambiguity';
           
           conflicts.push({
             sentence: sentence.trim(),
@@ -225,7 +241,7 @@ export function detectInvasionConflicts(reportText: string): ConflictInfo[] {
             negationKeyword: negation.keyword,
             startIndex: startIndex >= 0 ? startIndex : currentIndex,
             endIndex: startIndex >= 0 ? endIndex : currentIndex + sentence.length,
-            conflictType: 'proximity'
+            conflictType
           });
           
           // Only report one conflict per sentence to avoid duplicates
@@ -462,6 +478,88 @@ export function detectNodalStationAlerts(
   }
   
   return alerts;
+}
+
+/**
+ * Detects margin status and generates high-priority alerts for involved margins
+ */
+export function detectMarginStatus(reportText: string): MarginAlert[] {
+  const alerts: MarginAlert[] = [];
+  const text = reportText.toLowerCase();
+  
+  // Patterns for involved margins
+  const involvedPatterns = [
+    /margin[s]?\s*(is|are)?\s*(positive|involved|compromised)/i,
+    /(positive|involved)\s*margin/i,
+    /tumor\s*(at|extends?\s*to)\s*(the\s*)?margin/i,
+    /margin[s]?\s*positive\s*for\s*(tumor|carcinoma|malignancy)/i,
+    /carcinoma\s*(at|involves?|extends?\s*to)\s*(the\s*)?margin/i,
+    /(bronchial|vascular|parenchymal|pleural)\s*margin[s]?\s*:\s*(positive|involved)/i,
+    /margin[s]?\s*involvement/i,
+    /margin[s]?\s*(status|clearance)\s*:\s*(positive|involved)/i,
+  ];
+  
+  // Patterns for close margins (< 1mm or specified as close)
+  const closePatterns = [
+    /margin[s]?\s*(is|are)?\s*close/i,
+    /close\s*margin/i,
+    /margin\s*clearance\s*[:<]?\s*[0-9.]+\s*mm/i,
+    /tumor\s*(within|<)\s*[0-9.]+\s*mm\s*(of|from)?\s*(the\s*)?margin/i,
+  ];
+  
+  // Check for involved margins
+  for (const pattern of involvedPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      alerts.push({
+        margin: match[0],
+        status: 'involved',
+        message: '🚨 HIGH PRIORITY: Positive/involved margin detected. This significantly impacts patient management and may require additional resection or adjuvant therapy. Immediate clinical correlation recommended.'
+      });
+      break; // Only one involved alert
+    }
+  }
+  
+  // Check for close margins
+  for (const pattern of closePatterns) {
+    const match = text.match(pattern);
+    if (match && !alerts.some(a => a.status === 'involved')) {
+      alerts.push({
+        margin: match[0],
+        status: 'close',
+        message: '⚠️ Close margin detected. Consider clinical significance based on margin distance and tumor biology.'
+      });
+      break;
+    }
+  }
+  
+  return alerts;
+}
+
+/**
+ * Detects multiple primary tumors for (m) suffix per AJCC standards
+ */
+export function detectMultiplePrimaryTumors(reportText: string): boolean {
+  const text = reportText.toLowerCase();
+  
+  const multiplePatterns = [
+    /multiple\s*(primary\s*)?(tumors?|nodules?|masses?|lesions?)/i,
+    /\d+\s*(separate|distinct|synchronous)\s*(tumors?|nodules?|masses?|lesions?)/i,
+    /(two|three|four|2|3|4)\s*(separate\s*)?(primary\s*)?(tumors?|nodules?|masses?|lesions?)/i,
+    /multifocal\s*(tumor|carcinoma|adenocarcinoma)/i,
+    /synchronous\s*(primary\s*)?(tumors?|carcinomas?)/i,
+    /(tumor|lesion)\s*(#|number)?\s*(1|2|3|one|two|three)/i,
+    /separate\s*primaries/i,
+    /bilateral\s*(tumors?|carcinomas?|lung\s*cancers?)/i,
+  ];
+  
+  for (const pattern of multiplePatterns) {
+    if (pattern.test(text)) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 export function parsePathologyReport(reportText: string): ParsedReport {
   const text = reportText.toLowerCase();
@@ -1012,7 +1110,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   // ============================================
   // CONFLICT DETECTION - Safety Logic Layer
   // ============================================
-  // Detect invasion + negation keywords within 10-word proximity
+  // Detect invasion + negation keywords within 5-word proximity (6-10 = ambiguous)
   const conflicts = detectInvasionConflicts(reportText);
   
   // Detect ambiguous phrases that require manual verification
@@ -1029,6 +1127,24 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   // ============================================
   const nodalStationAlerts = detectNodalStationAlerts(reportText, inputs.nodal_stations);
 
+  // ============================================
+  // MARGIN DETECTION - High Priority Alert
+  // ============================================
+  const marginAlerts = detectMarginStatus(reportText);
+
+  // ============================================
+  // MULTIPLE PRIMARY TUMORS DETECTION - "(m)" suffix
+  // ============================================
+  const multiplePrimaryTumors = detectMultiplePrimaryTumors(reportText);
+
+  // ============================================
+  // INVASIVE SIZE MISSING CHECK (for nonmucinous adenocarcinomas)
+  // ============================================
+  const invasiveSizeMissing = 
+    inputs.histology.is_invasive_nonmucinous_adenocarcinoma_with_lepidic_component &&
+    inputs.measurements_cm.invasive_size_cm === null &&
+    inputs.measurements_cm.percent_invasive_0_to_100 === null;
+
   return { 
     inputs, 
     extractedText, 
@@ -1040,6 +1156,9 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     hasConflict: allConflicts.length > 0,
     nodalStationAlerts,
     pT4Override: pT4Structures,
+    marginAlerts,
+    multiplePrimaryTumors,
+    invasiveSizeMissing,
   };
 }
 
@@ -1114,7 +1233,10 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
   if (inputs.direct_invasion.diaphragm) findings.push('diaphragm');
   if (inputs.direct_invasion.main_bronchus) findings.push('main bronchus');
 
-  // Helper to build result with full TNM
+  // Detect multiple primary tumors for (m) suffix
+  const hasMultiplePrimaries = detectMultiplePrimaryTumors(rawText);
+
+  // Helper to build result with full TNM (and (m) suffix if applicable)
   const buildResult = (
     applicability: ValidationResult['applicability'],
     t_category: string | null,
@@ -1122,15 +1244,25 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
     size_basis_cm_val: number | null | undefined,
     reason: string
   ): ValidationResult => {
+    // Add (m) suffix for multiple primary tumors per AJCC standards
+    const finalTCategory = t_category && hasMultiplePrimaries 
+      ? `${t_category}(m)` 
+      : t_category;
+    
     const stage_group = t_category 
       ? getStageGroup(t_category, n_category, m_category)
       : null;
     
     const survival = stage_group ? getSurvivalData(stage_group) : null;
     
+    // Add note about (m) suffix if applicable
+    const finalReason = hasMultiplePrimaries && t_category
+      ? `${reason} Note: (m) suffix added due to multiple primary tumors detected.`
+      : reason;
+    
     return {
       applicability,
-      t_category,
+      t_category: finalTCategory,
       n_category,
       m_category,
       stage_group,
@@ -1138,7 +1270,7 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
       icd10: icd10Result,
       basis,
       size_basis_cm: size_basis_cm_val ?? undefined,
-      reason,
+      reason: finalReason,
     };
   };
 
