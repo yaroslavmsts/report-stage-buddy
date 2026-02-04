@@ -338,7 +338,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     }
   }
 
-  // GOLDEN RULE: Detect total lung atelectasis/pneumonitis
+  // GOLDEN RULE #3: Detect total lung atelectasis/pneumonitis
   const atelectasisPatterns = [
     /total\s*(lung\s*)?(atelectasis|collapse)/i,
     /complete\s*(lung\s*)?(atelectasis|collapse)/i,
@@ -346,6 +346,12 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     /atelectasis\s*(of\s*)?(the\s*)?entire\s*lung/i,
     /collapse\s*(of\s*)?(the\s*)?entire\s*lung/i,
     /whole\s*lung\s*(atelectasis|collapse)/i,
+    // More flexible patterns
+    /complete\s*atelectasis\s*(of\s*)?(the\s*)?(entire|whole)?\s*lung/i,
+    /total\s*atelectasis\s*(of\s*)?(the\s*)?(entire|whole)?\s*lung/i,
+    /(entire|whole|complete|total)\s*lung\s*(collapse|atelectasis)/i,
+    /atelectasis\s*involving\s*(the\s*)?(entire|whole|complete)\s*lung/i,
+    /lung\s*(is\s*)?(completely|totally)\s*(collapsed|atelectatic)/i,
   ];
   
   const pneumonitisPatterns = [
@@ -354,6 +360,8 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     /entire\s*lung\s*pneumonitis/i,
     /pneumonitis\s*(of\s*)?(the\s*)?entire\s*lung/i,
     /obstructive\s*pneumonitis\s*(of\s*)?(the\s*)?(entire|whole)\s*lung/i,
+    /complete\s*pneumonitis\s*(of\s*)?(the\s*)?(entire|whole)?\s*lung/i,
+    /pneumonitis\s*involving\s*(the\s*)?(entire|whole)\s*lung/i,
   ];
   
   for (const pattern of atelectasisPatterns) {
