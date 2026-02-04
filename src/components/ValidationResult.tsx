@@ -8,6 +8,8 @@ interface ValidationResultProps {
     isAutoCalculated?: boolean;
     message: string;
     details: string;
+    clinicalNote?: string;
+    isLepidicMismatch?: boolean;
   };
   calculatedResult: ValidationResultType;
   parsedReport: ParsedReport;
@@ -120,10 +122,27 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
           {/* Reasoning - Always show */}
           <div className="border-t pt-3 sm:pt-4">
             <p className="text-[10px] sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">Reasoning</p>
-            <p className="text-xs sm:text-sm text-foreground leading-relaxed">
+            <div className="text-xs sm:text-sm text-foreground leading-relaxed whitespace-pre-line">
               {comparison.details || calculatedResult.reason}
-            </p>
+            </div>
           </div>
+
+          {/* Clinical Note - Show for lepidic mismatch cases */}
+          {comparison.clinicalNote && (
+            <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-info/10 border border-info/30 rounded-lg">
+              <div className="flex items-start gap-2 sm:gap-3">
+                <Info className="h-4 w-4 sm:h-5 sm:w-5 text-info flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[10px] sm:text-xs font-semibold text-info uppercase tracking-wide mb-1">
+                    Clinical Note
+                  </p>
+                  <p className="text-xs sm:text-sm text-foreground leading-relaxed">
+                    {comparison.clinicalNote}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Size & Basis - Compact layout */}
           <div className="grid grid-cols-2 gap-2 sm:gap-4">

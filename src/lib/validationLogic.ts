@@ -626,6 +626,8 @@ export function compareStages(
   message: string;
   details: string;
   isPleuralInvasionMismatch?: boolean;
+  clinicalNote?: string;
+  isLepidicMismatch?: boolean;
 } {
   // Auto-calculate mode: No reported stage found
   if (!reportedStage) {
@@ -696,7 +698,7 @@ export function compareStages(
     };
   }
 
-  // Check for invasive size mismatch (Golden Rule #2)
+  // Check for invasive size mismatch (Golden Rule #2) - Lepidic-predominant adenocarcinoma
   if (
     inputs.histology.is_invasive_nonmucinous_adenocarcinoma_with_lepidic_component &&
     inputs.measurements_cm.invasive_size_cm !== null &&
@@ -715,13 +717,29 @@ export function compareStages(
       criteriaText = '>1.0–2.0 cm';
     } else if (calculatedStage === 'pT1c') {
       criteriaText = '>2.0–3.0 cm';
+    } else if (calculatedStage === 'pT2a') {
+      criteriaText = '>3.0–4.0 cm';
+    } else if (calculatedStage === 'pT2b') {
+      criteriaText = '>4.0–5.0 cm';
     }
     
     return {
       isMatch: false,
       isAutoCalculated: false,
       message: 'Validation Failure: Staging Mismatch Detected',
-      details: `According to AJCC 8th Edition/CAP Lung Protocol, for nonmucinous adenocarcinomas with a lepidic component, only the invasive component size is used to assign the pT category. • Total Size: ${totalSize} cm (includes lepidic component). • Invasive Size: ${invasiveSize} cm. • Logic: An invasive component of ${invasiveSize} cm falls within the ${calculatedStage} criteria (${criteriaText}), making the reported ${reportedStage} clinically inconsistent.`,
+      details: `The reported stage ${reportedStage} is inconsistent with the calculated stage ${calculatedStage}.
+
+**Staging Basis:** Invasive component size (not total tumor size)
+
+**Measurements:**
+• Total Tumor Size: ${totalSize} cm (includes lepidic component)
+• Invasive Component Size: ${invasiveSize} cm
+
+**Calculated Stage:** ${calculatedStage} — based on invasive component of ${invasiveSize} cm, which falls within the ${calculatedStage} criteria (${criteriaText}).
+
+**Conclusion:** The reported ${reportedStage} does not align with AJCC 8th Edition staging criteria for this histologic subtype.`,
+      clinicalNote: 'Per CAP Lung Protocol Note A and AJCC 8th Edition, for nonmucinous adenocarcinomas with a lepidic component, only the size of the invasive component is used to assign the T category.',
+      isLepidicMismatch: true,
     };
   }
 
