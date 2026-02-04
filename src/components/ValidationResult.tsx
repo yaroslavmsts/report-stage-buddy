@@ -1,10 +1,11 @@
-import { CheckCircle, XCircle, AlertCircle, Info } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ValidationResult as ValidationResultType, ParsedReport } from '@/lib/validationLogic';
 
 interface ValidationResultProps {
   comparison: {
     isMatch: boolean;
+    isAutoCalculated?: boolean;
     message: string;
     details: string;
   };
@@ -13,11 +14,23 @@ interface ValidationResultProps {
 }
 
 export function ValidationResult({ comparison, calculatedResult, parsedReport }: ValidationResultProps) {
-  const isPass = comparison.isMatch;
-  const isIndeterminate = calculatedResult.applicability === 'indeterminate';
+  const isPass = comparison.isMatch && !comparison.isAutoCalculated;
+  const isAutoCalculated = comparison.isAutoCalculated && comparison.isMatch;
+  const isIndeterminate = calculatedResult.applicability === 'indeterminate' && !comparison.isAutoCalculated;
+  const isInsufficientData = comparison.isAutoCalculated && !comparison.isMatch;
   const isOutsideScope = calculatedResult.applicability === 'outside_scope';
 
   const getStatusConfig = () => {
+    if (isAutoCalculated) {
+      return {
+        icon: Lightbulb,
+        bgClass: 'bg-primary/10 border-primary/30',
+        iconClass: 'text-primary',
+        textClass: 'text-primary',
+        label: 'AUTO-CALCULATED',
+        pulseClass: '',
+      };
+    }
     if (isPass) {
       return {
         icon: CheckCircle,
@@ -28,13 +41,13 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
         pulseClass: 'animate-pulse-success',
       };
     }
-    if (isIndeterminate) {
+    if (isIndeterminate || isInsufficientData) {
       return {
         icon: AlertCircle,
         bgClass: 'bg-warning/10 border-warning/30',
         iconClass: 'text-warning',
         textClass: 'text-warning',
-        label: 'INDETERMINATE',
+        label: isInsufficientData ? 'INSUFFICIENT DATA' : 'INDETERMINATE',
         pulseClass: '',
       };
     }
@@ -50,6 +63,10 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
 
   const config = getStatusConfig();
   const StatusIcon = config.icon;
+
+  // Determine display labels based on auto-calculate mode
+  const calculatedStageLabel = isAutoCalculated ? 'Suggested Stage' : 'Calculated Stage';
+  const hasCalculatedStage = calculatedResult.t_category !== null;
 
   return (
     <div className="space-y-4">
@@ -85,26 +102,45 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
             <div className="p-4 bg-muted rounded-lg">
               <p className="text-sm font-medium text-muted-foreground mb-1">Reported Stage</p>
               <p className="text-xl font-semibold">
-                {parsedReport.reportedStage || 'Not found'}
+                {parsedReport.reportedStage || (
+                  <span className="text-muted-foreground italic">Not found in report</span>
+                )}
               </p>
             </div>
-            <div className="p-4 bg-muted rounded-lg">
-              <p className="text-sm font-medium text-muted-foreground mb-1">Calculated Stage</p>
-              <p className="text-xl font-semibold">
-                {calculatedResult.t_category || 'Cannot determine'}
+            <div className={`p-4 rounded-lg ${isAutoCalculated ? 'bg-primary/10 border border-primary/20' : 'bg-muted'}`}>
+              <p className="text-sm font-medium text-muted-foreground mb-1">{calculatedStageLabel}</p>
+              <p className={`text-xl font-semibold ${isAutoCalculated ? 'text-primary' : ''}`}>
+                {hasCalculatedStage ? calculatedResult.t_category : (
+                  <span className="text-muted-foreground italic">Cannot determine</span>
+                )}
               </p>
             </div>
           </div>
 
+          {/* Always show reasoning if we have any findings or a calculated result */}
           <div className="border-t pt-4">
             <p className="text-sm font-medium text-muted-foreground mb-2">Reasoning</p>
-            <p className="text-foreground">{comparison.details}</p>
+            <p className="text-foreground">
+              {comparison.details || calculatedResult.reason}
+            </p>
           </div>
 
           {calculatedResult.size_basis_cm !== undefined && calculatedResult.size_basis_cm !== null && (
             <div className="border-t pt-4">
               <p className="text-sm font-medium text-muted-foreground mb-2">Size Basis Used</p>
               <p className="text-foreground font-medium">{calculatedResult.size_basis_cm.toFixed(2)} cm</p>
+            </div>
+          )}
+
+          {calculatedResult.basis && (
+            <div className="border-t pt-4">
+              <p className="text-sm font-medium text-muted-foreground mb-2">Basis for Staging</p>
+              <p className="text-foreground font-medium capitalize">
+                {calculatedResult.basis === 'size_basis_cm' ? 'Tumor Size' : 
+                 calculatedResult.basis === 'pleural_invasion' ? 'Pleural Invasion' :
+                 calculatedResult.basis === 'override' ? 'Superficial Spreading Override' :
+                 calculatedResult.basis}
+              </p>
             </div>
           )}
         </CardContent>

@@ -359,21 +359,37 @@ export function compareStages(
   inputs: ValidationInputs
 ): {
   isMatch: boolean;
+  isAutoCalculated: boolean;
   message: string;
   details: string;
   isPleuralInvasionMismatch?: boolean;
 } {
+  // Auto-calculate mode: No reported stage found but we can calculate one
   if (!reportedStage) {
+    const hasFindings = calculatedResult.t_category !== null;
+    
+    if (hasFindings) {
+      return {
+        isMatch: true, // Treat as success since we're providing a suggestion
+        isAutoCalculated: true,
+        message: 'Suggested Stage',
+        details: `No reported stage found in the text. Based on the findings, the suggested stage is ${calculatedResult.t_category}. ${calculatedResult.reason}`,
+      };
+    }
+    
+    // No stage and no calculable result
     return {
       isMatch: false,
-      message: 'No stage found in report',
-      details: 'Could not extract a pT stage from the pathology report text.',
+      isAutoCalculated: true,
+      message: 'Insufficient Data',
+      details: 'No reported stage found and insufficient findings to calculate a stage. ' + calculatedResult.reason,
     };
   }
 
   if (calculatedResult.t_category === null) {
     return {
       isMatch: false,
+      isAutoCalculated: false,
       message: 'Cannot validate',
       details: calculatedResult.reason,
     };
@@ -390,6 +406,7 @@ export function compareStages(
   ) {
     return {
       isMatch: false,
+      isAutoCalculated: false,
       message: 'INCONSISTENT: Pleural invasion requires pT2a',
       details: `RED FLAG: Visceral pleural invasion (${inputs.pleural_invasion.pl_status}) is documented in the report, but the reported stage is ${reportedStage}. Per AJCC 8th edition staging criteria, any tumor with visceral pleural invasion (PL1 or PL2) must be classified as pT2a or higher, regardless of tumor size. The correct stage should be pT2a.`,
       isPleuralInvasionMismatch: true,
@@ -399,6 +416,7 @@ export function compareStages(
   if (normalizedReported === normalizedCalculated) {
     return {
       isMatch: true,
+      isAutoCalculated: false,
       message: 'Stage matches',
       details: `Reported ${reportedStage} matches calculated ${calculatedResult.t_category}. ${calculatedResult.reason}`,
     };
@@ -406,6 +424,7 @@ export function compareStages(
 
   return {
     isMatch: false,
+    isAutoCalculated: false,
     message: 'Stage mismatch',
     details: `Reported ${reportedStage} does not match calculated ${calculatedResult.t_category}. ${calculatedResult.reason}`,
   };
