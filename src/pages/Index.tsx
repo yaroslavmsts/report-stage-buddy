@@ -215,6 +215,39 @@ MICROSCOPIC DESCRIPTION:
 The tumor measures 2.3 cm and demonstrates solid growth pattern. The pleural invasion status is equivocal - elastic stain shows tumor approaching but not definitively crossing the elastic layer. The chest wall appears intact but the proximity of tumor to chest wall raises concern.
 
 NOTE: This example demonstrates CONFLICT DETECTION - sentences contain both invasion keywords AND negation keywords in close proximity, triggering the safety layer for manual verification.`
+  },
+  ipsilateralLobe: {
+    name: "🫁 Ipsilateral Lobe Nodule",
+    description: "Different lobe, same lung → pT4 (not pT1c or pM1a)",
+    report: `PATHOLOGY REPORT
+
+DIAGNOSIS: Right upper lobe lobectomy with additional nodule resection - Invasive adenocarcinoma
+
+PRIMARY TUMOR:
+- Location: Right upper lobe (RUL)
+- Tumor size: 2.1 cm in greatest dimension
+- Histologic type: Invasive adenocarcinoma, acinar predominant
+
+SEPARATE NODULE:
+- A separate tumor nodule was identified in the right lower lobe (RLL), measuring 0.8 cm
+- Histologically consistent with the primary tumor
+
+VISCERAL PLEURAL INVASION: Absent (PL0)
+
+MARGINS: Negative
+
+LYMPH NODES: 
+- Hilar lymph nodes: Negative (0/3)
+- Subcarinal lymph nodes: Negative (0/2)
+
+PATHOLOGIC STAGE: pT1c pN0
+
+MICROSCOPIC DESCRIPTION:
+The primary tumor in the RUL measures 2.1 cm with acinar growth pattern. A separate 0.8 cm tumor nodule is present in the RLL (different ipsilateral lobe). Both lesions show identical morphology consistent with intrapulmonary spread from a single primary.
+
+Per AJCC 8th Edition: A separate tumor nodule in a different lobe of the SAME lung (ipsilateral) is classified as pT4 - NOT pT1c (as might be suggested by size) and NOT pM1a (which applies to CONTRALATERAL lobe nodules).
+
+NOTE: This example demonstrates the Ipsilateral Lobe Rule - the reported pT1c is incorrect because the separate nodule in RLL (same lung, different lobe) mandates pT4 staging.`
   }
 };
 
@@ -242,7 +275,7 @@ const Index = () => {
     const parsedReport = parsePathologyReport(reportText);
     // Pass hasConflict to runValidation for conservative staging when conflicts detected
     const calculatedResult = runValidation(parsedReport.inputs, parsedReport.rawText, parsedReport.hasConflict);
-    const comparison = compareStages(parsedReport.reportedStage, calculatedResult, parsedReport.inputs);
+    const comparison = compareStages(parsedReport.reportedStage, calculatedResult, parsedReport.inputs, parsedReport.rawText);
 
     setValidationResult({
       comparison,
@@ -269,7 +302,8 @@ const Index = () => {
     const comparison = compareStages(
       validationResult.parsedReport.reportedStage, 
       calculatedResult, 
-      validationResult.parsedReport.inputs
+      validationResult.parsedReport.inputs,
+      validationResult.parsedReport.rawText
     );
     
     // Append override note to the reasoning
@@ -302,7 +336,8 @@ const Index = () => {
     const comparison = compareStages(
       validationResult.parsedReport.reportedStage, 
       calculatedResult, 
-      validationResult.parsedReport.inputs
+      validationResult.parsedReport.inputs,
+      validationResult.parsedReport.rawText
     );
     
     setValidationResult({
@@ -473,6 +508,14 @@ const Index = () => {
                           <div>
                             <p className="font-medium">{SAMPLE_REPORTS.conflictExample.name}</p>
                             <p className="text-xs text-muted-foreground">{SAMPLE_REPORTS.conflictExample.description}</p>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel>🫁 Anatomical Staging Rules</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => handleLoadSample('ipsilateralLobe')}>
+                          <div>
+                            <p className="font-medium">{SAMPLE_REPORTS.ipsilateralLobe.name}</p>
+                            <p className="text-xs text-muted-foreground">{SAMPLE_REPORTS.ipsilateralLobe.description}</p>
                           </div>
                         </DropdownMenuItem>
                       </DropdownMenuContent>

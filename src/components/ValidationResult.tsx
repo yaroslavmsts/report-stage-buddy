@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert, SubmissionAlert } from '@/lib/validationLogic';
+import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert, SubmissionAlert, IpsilateralLobeInfo } from '@/lib/validationLogic';
 
 interface ValidationResultProps {
   comparison: {
@@ -287,6 +287,38 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
                 </span>
               ))}
             </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Ipsilateral Lobe Nodule Alert - pT4 Override */}
+      {parsedReport.ipsilateralLobeInfo?.isDifferentLobesSameLung && (
+        <Alert className="border-2 border-destructive/50 bg-destructive/10">
+          <AlertTriangle className="h-5 w-5 text-destructive" />
+          <AlertTitle className="text-destructive font-semibold">
+            ⚠️ Ipsilateral Lobe Override: pT4 Required
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-2">
+            <p className="text-sm text-foreground">
+              A separate tumor nodule in a different lobe of the SAME lung (ipsilateral) was detected. Per AJCC 8th Edition, this automatically assigns pT4 staging.
+            </p>
+            <div className="p-2 rounded bg-destructive/10 border border-destructive/20">
+              <div className="flex flex-wrap gap-3 text-xs">
+                <div>
+                  <span className="font-medium text-muted-foreground">Primary Tumor:</span>{' '}
+                  <span className="font-semibold text-foreground">{parsedReport.ipsilateralLobeInfo.primaryLobe} ({parsedReport.ipsilateralLobeInfo.primaryLung} Lung)</span>
+                </div>
+                {parsedReport.ipsilateralLobeInfo.noduleLobe && (
+                  <div>
+                    <span className="font-medium text-muted-foreground">Separate Nodule:</span>{' '}
+                    <span className="font-semibold text-foreground">{parsedReport.ipsilateralLobeInfo.noduleLobe} ({parsedReport.ipsilateralLobeInfo.noduleLung} Lung)</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              <strong>Rule:</strong> Different lobe + Same lung = pT4 (not pT1c or pM1a)
+            </p>
           </AlertDescription>
         </Alert>
       )}
