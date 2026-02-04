@@ -1,6 +1,8 @@
-import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, DollarSign, Heart, FileText, AlertTriangle, HelpCircle, MapPin, Scissors } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, DollarSign, Heart, FileText, AlertTriangle, HelpCircle, MapPin, Scissors, UserCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert } from '@/lib/validationLogic';
 
@@ -15,16 +17,30 @@ interface ValidationResultProps {
   };
   calculatedResult: ValidationResultType;
   parsedReport: ParsedReport;
+  onOverride?: () => void;
+  isOverridden?: boolean;
+  overrideTimestamp?: string;
 }
 
-export function ValidationResult({ comparison, calculatedResult, parsedReport }: ValidationResultProps) {
-  const hasConflict = parsedReport.hasConflict;
+export function ValidationResult({ comparison, calculatedResult, parsedReport, onOverride, isOverridden, overrideTimestamp }: ValidationResultProps) {
+  const hasConflict = parsedReport.hasConflict && !isOverridden;
   const isPass = comparison.isMatch && !comparison.isAutoCalculated && !hasConflict;
   const isAutoCalculated = comparison.isAutoCalculated && comparison.isMatch && !hasConflict;
   const isIndeterminate = calculatedResult.applicability === 'indeterminate' && !comparison.isAutoCalculated;
   const isInsufficientData = comparison.isAutoCalculated && !comparison.isMatch;
 
   const getStatusConfig = () => {
+    // USER VERIFIED (override applied)
+    if (isOverridden) {
+      return {
+        icon: UserCheck,
+        bgClass: 'bg-info/10 border-info/50',
+        iconClass: 'text-info',
+        textClass: 'text-info',
+        label: 'USER VERIFIED',
+        pulseClass: '',
+      };
+    }
     // CONFLICT DETECTED takes highest priority
     if (hasConflict) {
       return {
@@ -119,16 +135,18 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
                 {config.label}
               </h3>
               <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1 line-clamp-2">
-                {hasConflict 
-                  ? 'Linguistic conflict detected. Using conservative size-based staging only.'
-                  : comparison.message}
+                {isOverridden 
+                  ? 'Manual override applied. Full staging logic enabled.'
+                  : hasConflict 
+                    ? 'Linguistic conflict detected. Using conservative size-based staging only.'
+                    : comparison.message}
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Conflict Detection Alert */}
+      {/* Conflict Detection Alert - with Override option */}
       {hasConflict && parsedReport.conflicts.length > 0 && (
         <Alert className="border-2 border-amber-500/50 bg-amber-500/10">
           <AlertTriangle className="h-5 w-5 text-amber-500" />
@@ -185,6 +203,48 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport }:
             <div className="p-2 rounded bg-muted/50 border border-border">
               <p className="text-xs text-muted-foreground">
                 <span className="font-semibold text-amber-600 dark:text-amber-400">⚠️ Conservative Staging Applied:</span> Due to the detected conflict, invasion-based staging overrides have been disabled. The calculated stage is based on tumor size only. Invasion status could not be safely determined.
+              </p>
+            </div>
+
+            {/* Manual Override Button */}
+            {onOverride && (
+              <div className="pt-2 border-t border-amber-500/30">
+                <Button 
+                  onClick={onOverride}
+                  variant="outline"
+                  className="w-full border-info text-info hover:bg-info/10 hover:text-info"
+                >
+                  <UserCheck className="mr-2 h-4 w-4" />
+                  Confirm Findings & Override
+                </Button>
+                <p className="text-[10px] text-muted-foreground mt-2 text-center">
+                  Clicking this will accept the findings as reviewed and re-enable full staging logic including invasion overrides.
+                </p>
+              </div>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* User Verified Banner - Show when override is applied */}
+      {isOverridden && parsedReport.conflicts.length > 0 && (
+        <Alert className="border-2 border-info/50 bg-info/10">
+          <UserCheck className="h-5 w-5 text-info" />
+          <AlertTitle className="text-info font-semibold">
+            ✓ User Verified - Manual Override Applied
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-2">
+            <p className="text-sm text-foreground">
+              The conflict warnings have been reviewed and findings confirmed. Full staging logic has been restored, including invasion-based overrides.
+            </p>
+            {overrideTimestamp && (
+              <p className="text-xs text-muted-foreground">
+                Override applied at: {overrideTimestamp}
+              </p>
+            )}
+            <div className="p-2 rounded bg-muted/50 border border-border">
+              <p className="text-xs text-muted-foreground italic">
+                ⚠️ <span className="font-semibold">Note:</span> Manual override applied by user. AI safety protocols bypassed for this calculation.
               </p>
             </div>
           </AlertDescription>
