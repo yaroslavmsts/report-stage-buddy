@@ -5,9 +5,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ValidationResult } from '@/components/ValidationResult';
 import { parsePathologyReport, runValidation, compareStages, getStagingSource } from '@/lib/validationLogic';
 import { STAGING_RULES, GOLDEN_RULES } from '@/lib/stagingRules';
-import { Loader2, FileText, Shield, AlertTriangle, Database, Zap } from 'lucide-react';
+import { Loader2, FileText, Shield, AlertTriangle, Database, Zap, ChevronDown } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
-const SAMPLE_REPORT = `PATHOLOGY REPORT
+// Sample reports demonstrating each Golden Rule
+const SAMPLE_REPORTS = {
+  basic: {
+    name: "Basic pT1b (Size-based)",
+    description: "Standard size-based staging without overrides",
+    report: `PATHOLOGY REPORT
 
 DIAGNOSIS: Left upper lobe wedge resection - Invasive adenocarcinoma
 
@@ -19,10 +32,131 @@ INVASIVE COMPONENT: 0.8 cm
 
 MARGINS: Negative
 
-PATHOLOGIC STAGE: pT1b
+LYMPH NODES: No lymph node metastasis identified (0/3)
+
+PATHOLOGIC STAGE: pT1b pN0
 
 MICROSCOPIC DESCRIPTION:
-Sections show a well-differentiated invasive adenocarcinoma with predominant lepidic growth pattern and a focus of acinar invasion measuring 0.8 cm. No lymphovascular invasion identified.`;
+Sections show a well-differentiated invasive adenocarcinoma with predominant lepidic growth pattern and a focus of acinar invasion measuring 0.8 cm. No lymphovascular invasion identified.`
+  },
+  goldenRule1: {
+    name: "⚡ Golden Rule #1: Invasion Trump Card",
+    description: "Visceral pleural invasion (PL1) overrides size → pT2a",
+    report: `PATHOLOGY REPORT
+
+DIAGNOSIS: Right upper lobe lobectomy - Invasive adenocarcinoma
+
+TUMOR SIZE: 0.9 cm in greatest dimension
+
+HISTOLOGIC TYPE: Invasive adenocarcinoma, acinar predominant
+
+VISCERAL PLEURAL INVASION: Present (PL1 - invasion beyond elastic layer)
+
+MARGINS: Negative
+
+LYMPH NODES: Hilar lymph nodes negative for malignancy (0/5)
+
+PATHOLOGIC STAGE: pT1a pN0
+
+MICROSCOPIC DESCRIPTION:
+Despite its small size (0.9 cm), the tumor extends to the visceral pleura with breach of the elastic layer, qualifying as PL1 visceral pleural invasion. Per AJCC 8th Edition, this automatically upstages to pT2a regardless of tumor size.
+
+NOTE: This report intentionally shows pT1a to demonstrate the Invasion Trump Card mismatch - the correct stage should be pT2a due to PL1 invasion.`
+  },
+  goldenRule2: {
+    name: "⚡ Golden Rule #2: Total vs Invasive Size",
+    description: "Uses invasive size (0.8 cm) instead of total size (2.5 cm)",
+    report: `PATHOLOGY REPORT
+
+DIAGNOSIS: Left lower lobe segmentectomy - Invasive adenocarcinoma
+
+TUMOR MEASUREMENTS:
+- Total tumor size: 2.5 cm in greatest dimension
+- Invasive component size: 0.8 cm
+
+HISTOLOGIC TYPE: Invasive nonmucinous adenocarcinoma with predominant lepidic component (70% lepidic, 30% acinar)
+
+MARGINS: Negative, closest margin 0.5 cm
+
+LYMPH NODES: Level 11 lymph nodes negative (0/2)
+
+PATHOLOGIC STAGE: pT1a pN0
+
+MICROSCOPIC DESCRIPTION:
+The tumor is composed predominantly of lepidic growth pattern (70%) with a discrete focus of acinar invasion measuring 0.8 cm. The invasive component is well-demarcated within the larger lepidic area. Per AJCC 8th Edition, the INVASIVE SIZE (0.8 cm) is used for staging in tumors with lepidic component, not the total size (2.5 cm).`
+  },
+  goldenRule3: {
+    name: "⚡ Golden Rule #3: Atelectasis/Pneumonitis",
+    description: "Total lung collapse → automatic pT2",
+    report: `PATHOLOGY REPORT
+
+DIAGNOSIS: Right pneumonectomy - Invasive squamous cell carcinoma
+
+TUMOR SIZE: 0.7 cm in greatest dimension
+
+HISTOLOGIC TYPE: Invasive squamous cell carcinoma, moderately differentiated
+
+BRONCHIAL INVOLVEMENT: Tumor involves the main bronchus causing complete obstruction
+
+ASSOCIATED FINDINGS: Total right lung atelectasis/collapse secondary to bronchial obstruction
+
+MARGINS: Bronchial margin negative
+
+LYMPH NODES: Subcarinal lymph nodes with metastatic carcinoma (2/4 positive)
+
+PATHOLOGIC STAGE: pT2 pN2
+
+MICROSCOPIC DESCRIPTION:
+Despite the small primary tumor size (0.7 cm), there is complete collapse of the right lung (total atelectasis) due to bronchial obstruction. Per AJCC 8th Edition Golden Rule, any tumor causing total lung atelectasis or pneumonitis is automatically staged as pT2 regardless of size.`
+  },
+  stageIIIA: {
+    name: "Stage IIIA Example",
+    description: "Large tumor with N2 nodal involvement",
+    report: `PATHOLOGY REPORT
+
+DIAGNOSIS: Left upper lobe lobectomy with mediastinal lymph node dissection - Invasive adenocarcinoma
+
+TUMOR SIZE: 4.2 cm in greatest dimension
+
+HISTOLOGIC TYPE: Invasive adenocarcinoma, solid predominant with focal micropapillary features
+
+VISCERAL PLEURAL INVASION: Absent (PL0)
+
+MARGINS: Negative
+
+LYMPH NODES:
+- Hilar lymph nodes (Level 10): Negative (0/3)
+- Subcarinal lymph nodes (Level 7): Positive for metastatic carcinoma (2/5)
+- Ipsilateral mediastinal (Level 5): Positive for metastatic carcinoma (1/2)
+
+PATHOLOGIC STAGE: pT2a pN2
+
+MICROSCOPIC DESCRIPTION:
+A 4.2 cm invasive adenocarcinoma with solid predominant pattern and aggressive features including micropapillary component. Metastatic carcinoma identified in ipsilateral mediastinal and subcarinal lymph nodes, consistent with N2 disease. Final stage: Stage IIIA (T2a N2 M0).`
+  },
+  stageIV: {
+    name: "Stage IV Example",
+    description: "Malignant pleural effusion → pM1a",
+    report: `PATHOLOGY REPORT
+
+DIAGNOSIS: Right lower lobe wedge biopsy with pleural fluid cytology - Invasive adenocarcinoma
+
+TUMOR SIZE: 1.8 cm in greatest dimension
+
+HISTOLOGIC TYPE: Invasive adenocarcinoma, acinar predominant
+
+PLEURAL FLUID CYTOLOGY: POSITIVE for malignant cells consistent with adenocarcinoma
+
+VISCERAL PLEURAL INVASION: Present, with malignant pleural effusion
+
+LYMPH NODES: Hilar lymph node with metastatic carcinoma (1/2 positive)
+
+PATHOLOGIC STAGE: pT2a pN1 pM1a
+
+MICROSCOPIC DESCRIPTION:
+The primary tumor measures 1.8 cm with visceral pleural invasion. Pleural fluid cytology demonstrates malignant cells morphologically consistent with primary lung adenocarcinoma. Per AJCC 8th Edition, malignant pleural effusion is classified as M1a, resulting in Stage IVA disease.`
+  }
+};
 
 const Index = () => {
   const [reportText, setReportText] = useState('');
@@ -54,8 +188,8 @@ const Index = () => {
     setIsValidating(false);
   };
 
-  const handleLoadSample = () => {
-    setReportText(SAMPLE_REPORT);
+  const handleLoadSample = (sampleKey: keyof typeof SAMPLE_REPORTS) => {
+    setReportText(SAMPLE_REPORTS[sampleKey].report);
     setValidationResult(null);
   };
 
@@ -123,14 +257,62 @@ const Index = () => {
                     )}
                   </Button>
                   <div className="flex gap-2 sm:gap-3">
-                    <Button
-                      variant="outline"
-                      onClick={handleLoadSample}
-                      className="flex-1 sm:flex-none"
-                      size="default"
-                    >
-                      Load Sample
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="flex-1 sm:flex-none"
+                          size="default"
+                        >
+                          Load Sample
+                          <ChevronDown className="ml-2 h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-72">
+                        <DropdownMenuLabel>Sample Reports</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => handleLoadSample('basic')}>
+                          <div>
+                            <p className="font-medium">{SAMPLE_REPORTS.basic.name}</p>
+                            <p className="text-xs text-muted-foreground">{SAMPLE_REPORTS.basic.description}</p>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-destructive">⚡ Golden Rule Examples</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => handleLoadSample('goldenRule1')}>
+                          <div>
+                            <p className="font-medium">{SAMPLE_REPORTS.goldenRule1.name}</p>
+                            <p className="text-xs text-muted-foreground">{SAMPLE_REPORTS.goldenRule1.description}</p>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleLoadSample('goldenRule2')}>
+                          <div>
+                            <p className="font-medium">{SAMPLE_REPORTS.goldenRule2.name}</p>
+                            <p className="text-xs text-muted-foreground">{SAMPLE_REPORTS.goldenRule2.description}</p>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleLoadSample('goldenRule3')}>
+                          <div>
+                            <p className="font-medium">{SAMPLE_REPORTS.goldenRule3.name}</p>
+                            <p className="text-xs text-muted-foreground">{SAMPLE_REPORTS.goldenRule3.description}</p>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel>Stage Grouping Examples</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => handleLoadSample('stageIIIA')}>
+                          <div>
+                            <p className="font-medium">{SAMPLE_REPORTS.stageIIIA.name}</p>
+                            <p className="text-xs text-muted-foreground">{SAMPLE_REPORTS.stageIIIA.description}</p>
+                          </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleLoadSample('stageIV')}>
+                          <div>
+                            <p className="font-medium">{SAMPLE_REPORTS.stageIV.name}</p>
+                            <p className="text-xs text-muted-foreground">{SAMPLE_REPORTS.stageIV.description}</p>
+                          </div>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     {reportText && (
                       <Button
                         variant="ghost"
