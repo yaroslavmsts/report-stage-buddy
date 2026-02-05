@@ -1576,37 +1576,47 @@ export function parsePathologyReport(reportText: string): ParsedReport {
 }
 
 // ============================================
-// STRICT CHECKLIST PROTOCOL - 4 Atomic Rules
+// STRICT CHECKLIST PROTOCOL v8.1.0 - 4 Atomic Rules
 // ============================================
-// The app MUST check these 4 rules in THIS SPECIFIC ORDER before suggesting a stage:
-// Rule 1: The Adenocarcinoma Filter
-// Rule 2: The Anatomical Trump Cards
-// Rule 3: The Lobe Map (Laterality)
-// Rule 4: The Final Calculation (Size-based)
+// PRIORITY HIERARCHY (checked in THIS SPECIFIC ORDER):
+// 1. Rule_1_Adenocarcinoma_Component - IF invasive component, LOCK to that value
+// 2. Rule_2_Anatomical_Trump_Cards - Overrides by structure (hilar fat, mediastinum, etc.)
+// 3. Rule_3_Nodule_Laterality - Multiple lobes force pT3/pT4/pM1a
+// 4. Rule_4_Numerical_Size - Size-based staging (ONLY if Rules 1-3 empty)
 // ============================================
 export function runValidation(inputs: ValidationInputs, rawText: string = '', hasConflict: boolean = false): ValidationResult {
   
   // ============================================
+  // EXTRACTION PHASE
+  // ============================================
+  // Identify histology, locations, and invasion findings FIRST
+  const isAdenocarcinoma = 
+    inputs.histology.is_invasive_nonmucinous_adenocarcinoma_with_lepidic_component ||
+    rawText.toLowerCase().includes('adenocarcinoma');
+  
+  // ============================================
   // RULE 1: THE ADENOCARCINOMA FILTER
   // IF 'invasive component' is mentioned, LOCK measurement to that value only
-  // DISCARD 'total size' for staging
+  // DISCARD 'total size' for staging - YOU ARE FORBIDDEN FROM USING TOTAL SIZE
   // ============================================
   
   let size_basis_cm: number | null = null;
   let usedInvasiveSize = false;
   let rule1Triggered = false;
-  let rule1LogicPath = '';
+  let rule1Status = '';
+  let rule1Details = '';
   
   // Check if invasive size is explicitly provided
   if (inputs.measurements_cm.invasive_size_cm !== null) {
-    // RULE 1 TRIGGERED: Lock to invasive size, discard total size
+    // RULE 1 TRIGGERED: Lock to invasive size, discard total size COMPLETELY
     size_basis_cm = inputs.measurements_cm.invasive_size_cm;
     usedInvasiveSize = true;
     rule1Triggered = true;
-    rule1LogicPath = `✅ **Triggered Rule 1: The Adenocarcinoma Filter** — Using invasive component only (${size_basis_cm} cm)`;
+    rule1Status = '✅ TRIGGERED';
+    rule1Details = `**Used Invasive Size:** ${size_basis_cm} cm`;
     if (inputs.measurements_cm.total_tumor_size_cm !== null && 
         inputs.measurements_cm.total_tumor_size_cm !== size_basis_cm) {
-      rule1LogicPath += ` | Total Size: ${inputs.measurements_cm.total_tumor_size_cm} cm (DISCARDED per Rule 1)`;
+      rule1Details += `\n**Total Size:** ${inputs.measurements_cm.total_tumor_size_cm} cm → **DISCARDED** (forbidden per Rule 1)`;
     }
   } else if (inputs.histology.is_invasive_nonmucinous_adenocarcinoma_with_lepidic_component && 
              inputs.measurements_cm.total_tumor_size_cm !== null &&
@@ -1618,14 +1628,15 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
     size_basis_cm = estimated_invasive_size_cm;
     usedInvasiveSize = true;
     rule1Triggered = true;
-    rule1LogicPath = `✅ **Triggered Rule 1: The Adenocarcinoma Filter** — Calculated invasive component: ${size_basis_cm.toFixed(2)} cm (${inputs.measurements_cm.percent_invasive_0_to_100}% of ${inputs.measurements_cm.total_tumor_size_cm} cm)`;
+    rule1Status = '✅ TRIGGERED';
+    rule1Details = `**Calculated Invasive Size:** ${size_basis_cm.toFixed(2)} cm (${inputs.measurements_cm.percent_invasive_0_to_100}% of ${inputs.measurements_cm.total_tumor_size_cm} cm)`;
   } else {
     // No invasive component found - use total size (Rule 1 NOT triggered)
     size_basis_cm = inputs.measurements_cm.greatest_dimension_cm;
-    rule1LogicPath = `⬜ **Rule 1 (Adenocarcinoma Filter): Not triggered** — No invasive component specified`;
-    if (size_basis_cm !== null) {
-      rule1LogicPath += ` | Using Greatest Dimension: ${size_basis_cm} cm`;
-    }
+    rule1Status = '⬜ Not triggered';
+    rule1Details = size_basis_cm !== null 
+      ? `No invasive component specified. Using Greatest Dimension: ${size_basis_cm} cm`
+      : 'No invasive component specified.';
   }
 
   // Calculate N and M stages from raw text
@@ -1639,15 +1650,49 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
   // Detect multiple primary tumors for (m) suffix
   const hasMultiplePrimaries = detectMultiplePrimaryTumors(rawText);
 
+  // ============================================
+  // BUILD CHECKLIST DISPLAY HELPER
+  // ============================================
+  const buildChecklistReasoning = (
+    triggeredRuleNum: number,
+    triggeredRuleDetails: string,
+    rule2Status?: string,
+    rule2Details?: string,
+    rule3Status?: string,
+    rule3Details?: string
+  ): string => {
+    return `## STRICT CHECKLIST PROTOCOL v8.1.0
+
+---
+
+### ✓ Checklist Status:
+
+| Rule | Status | Details |
+|------|--------|---------|
+| **Rule 1:** Adenocarcinoma Filter | ${rule1Status} | ${rule1Details.split('\n')[0]} |
+| **Rule 2:** Anatomical Trump Cards | ${rule2Status || '⬜ Not triggered'} | ${rule2Details || 'None found'} |
+| **Rule 3:** Lobe Map (Laterality) | ${rule3Status || '⬜ Not triggered'} | ${rule3Details || 'N/A'} |
+| **Rule 4:** Numerical Size | ${triggeredRuleNum === 4 ? '✅ APPLIED' : '⬜ Skipped'} | ${triggeredRuleNum === 4 ? 'Size-based staging' : 'Override rule triggered'} |
+
+---
+
+### Logic Path:
+
+${triggeredRuleDetails}`;
+  };
+
   // Helper to build result with Strict Checklist Protocol display
   const buildResult = (
     applicability: ValidationResult['applicability'],
     t_category: string | null,
     basis: string | undefined,
     size_basis_cm_val: number | null | undefined,
-    triggeredRule: string,
-    ruleDetails: string,
-    additionalNotes: string = ''
+    triggeredRuleNum: number,
+    triggeredRuleDetails: string,
+    rule2Status?: string,
+    rule2Details?: string,
+    rule3Status?: string,
+    rule3Details?: string
   ): ValidationResult => {
     // Add (m) suffix for multiple primary tumors per AJCC standards
     const finalTCategory = t_category && hasMultiplePrimaries 
@@ -1661,17 +1706,14 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
     const survival = stage_group ? getSurvivalData(stage_group) : null;
     
     // Build final reason with Strict Checklist Protocol display
-    let finalReason = `## STRICT CHECKLIST PROTOCOL
-
-${triggeredRule}
-
----
-
-${ruleDetails}`;
-    
-    if (additionalNotes) {
-      finalReason += `\n\n${additionalNotes}`;
-    }
+    let finalReason = buildChecklistReasoning(
+      triggeredRuleNum,
+      triggeredRuleDetails,
+      rule2Status,
+      rule2Details,
+      rule3Status,
+      rule3Details
+    );
     
     // Add note about (m) suffix if applicable
     if (hasMultiplePrimaries && t_category) {
@@ -1702,8 +1744,10 @@ ${ruleDetails}`;
       'pTis(AIS)',
       undefined,
       undefined,
-      '🔬 **HISTOLOGY OVERRIDE: Adenocarcinoma in situ (AIS) detected**',
-      `${getStagingSource()}: Adenocarcinoma in situ is staged as pTis(AIS). The Strict Checklist Protocol is bypassed for this special histology type.`
+      0, // Special histology override
+      `🔬 **HISTOLOGY OVERRIDE: Adenocarcinoma in situ (AIS) detected**
+
+${getStagingSource()}: Adenocarcinoma in situ is staged as pTis(AIS). The Strict Checklist Protocol is bypassed for this special histology type.`
     );
   }
 
@@ -1713,8 +1757,10 @@ ${ruleDetails}`;
       'pT1mi',
       undefined,
       undefined,
-      '🔬 **HISTOLOGY OVERRIDE: Minimally invasive adenocarcinoma (MIA) detected**',
-      `${getStagingSource()}: Minimally invasive adenocarcinoma is staged as pT1mi. The Strict Checklist Protocol is bypassed for this special histology type.`
+      0, // Special histology override
+      `🔬 **HISTOLOGY OVERRIDE: Minimally invasive adenocarcinoma (MIA) detected**
+
+${getStagingSource()}: Minimally invasive adenocarcinoma is staged as pT1mi. The Strict Checklist Protocol is bypassed for this special histology type.`
     );
   }
 
@@ -1726,8 +1772,10 @@ ${ruleDetails}`;
       'pT2',
       'golden_rule',
       undefined,
-      `⚠️ **GOLDEN RULE OVERRIDE: ${condition} detected**`,
-      `Per AJCC 8th Edition, a tumor of any size causing collapse of the entire lung is automatically staged as pT2. This bypasses the standard Strict Checklist Protocol.`
+      0, // Golden rule override
+      `⚠️ **GOLDEN RULE OVERRIDE: ${condition} detected**
+
+Per AJCC 8th Edition, a tumor of any size causing collapse of the entire lung is automatically staged as pT2. This bypasses the standard Strict Checklist Protocol.`
     );
   }
 
@@ -1759,12 +1807,15 @@ ${ruleDetails}`;
       'pT4',
       'anatomical_override',
       undefined,
-      `✅ **Triggered Rule 2: The Anatomical Trump Cards**`,
-      `**Structure(s) Found:** ${structureList}
+      2, // Rule 2 triggered
+      `**Triggered Rule 2: The Anatomical Trump Cards**
+
+**Structure(s) Found:** ${structureList}
 **Override Stage:** pT4
 
 Per AJCC 8th Edition, invasion of diaphragm, mediastinum, heart, great vessels, trachea, esophagus, vertebral body, recurrent laryngeal nerve, or carina automatically assigns **pT4** — tumor size is IGNORED.`,
-      rule1LogicPath
+      '✅ TRIGGERED',
+      structureList
     );
   }
 
@@ -1782,12 +1833,15 @@ Per AJCC 8th Edition, invasion of diaphragm, mediastinum, heart, great vessels, 
       'pT3',
       'anatomical_override',
       undefined,
-      `✅ **Triggered Rule 2: The Anatomical Trump Cards**`,
-      `**Structure(s) Found:** ${structureList}
+      2, // Rule 2 triggered
+      `**Triggered Rule 2: The Anatomical Trump Cards**
+
+**Structure(s) Found:** ${structureList}
 **Override Stage:** pT3
 
 Per AJCC 8th Edition, invasion of phrenic nerve, parietal pleura (PL3), chest wall, or parietal pericardium automatically assigns **pT3** — tumor size is IGNORED.`,
-      rule1LogicPath
+      '✅ TRIGGERED',
+      structureList
     );
   }
 
@@ -1806,12 +1860,15 @@ Per AJCC 8th Edition, invasion of phrenic nerve, parietal pleura (PL3), chest wa
       'pT2a',
       'anatomical_override',
       undefined,
-      `✅ **Triggered Rule 2: The Anatomical Trump Cards**`,
-      `**Structure(s) Found:** ${structureList}
+      2, // Rule 2 triggered
+      `**Triggered Rule 2: The Anatomical Trump Cards**
+
+**Structure(s) Found:** ${structureList}
 **Override Stage:** pT2a
 
 Per AJCC 8th Edition, visceral pleural invasion (PL1: beyond elastic layer, PL2: to pleural surface) or direct extension into hilar fat/soft tissue automatically assigns minimum **pT2a** — tumor size is IGNORED.`,
-      rule1LogicPath
+      '✅ TRIGGERED',
+      structureList
     );
   }
 
@@ -1845,11 +1902,9 @@ Per AJCC 8th Edition, visceral pleural invasion (PL1: beyond elastic layer, PL2:
       icd10: icd10Result,
       basis: 'contralateral_nodule_override',
       size_basis_cm: size_basis_cm ?? undefined,
-      reason: `## STRICT CHECKLIST PROTOCOL
-
-✅ **Triggered Rule 3: The Lobe Map (Laterality)**
-
----
+      reason: buildChecklistReasoning(
+        3,
+        `**Triggered Rule 3: The Lobe Map (Laterality)**
 
 **Detected Locations:**
 ${lobeDetails}
@@ -1861,11 +1916,12 @@ ${lobeDetails}
 
 **Override:** Contralateral (opposite lung) = **pM1a → Stage IVA**
 
-Per AJCC 8th Edition, separate tumor nodule in the contralateral lung automatically assigns pM1a staging.
-
----
-
-${rule1LogicPath}`,
+Per AJCC 8th Edition, separate tumor nodule in the contralateral lung automatically assigns pM1a staging.`,
+        '⬜ Not triggered',
+        'None found',
+        '✅ TRIGGERED',
+        'Contralateral nodule'
+      ),
     };
   }
 
@@ -1880,8 +1936,10 @@ ${rule1LogicPath}`,
       'pT4',
       'ipsilateral_lobe_override',
       undefined,
-      `✅ **Triggered Rule 3: The Lobe Map (Laterality)**`,
-      `**Detected Locations:**
+      3, // Rule 3 triggered
+      `**Triggered Rule 3: The Lobe Map (Laterality)**
+
+**Detected Locations:**
 ${lobeDetails}
 
 **AJCC Lobe Map:**
@@ -1892,7 +1950,10 @@ ${lobeDetails}
 **Override:** Multiple lobes on SAME side = **pT4**
 
 Per AJCC 8th Edition, separate tumor nodule in a different ipsilateral lobe automatically assigns pT4 staging regardless of tumor size.`,
-      rule1LogicPath
+      '⬜ Not triggered',
+      'None found',
+      '✅ TRIGGERED',
+      'Ipsilateral different lobe'
     );
   }
 
@@ -1907,14 +1968,19 @@ Per AJCC 8th Edition, separate tumor nodule in a different ipsilateral lobe auto
       'pT3',
       'same_lobe_nodule_override',
       undefined,
-      `✅ **Triggered Rule 3: The Lobe Map (Laterality)**`,
-      `**Detected Location:**
+      3, // Rule 3 triggered
+      `**Triggered Rule 3: The Lobe Map (Laterality)**
+
+**Detected Location:**
 ${lobeDetails}
 
 **AJCC Lobe Map:** Same lobe nodule = **pT3**
 
 Per AJCC 8th Edition, separate tumor nodule in the same lobe automatically assigns pT3 staging regardless of tumor size.`,
-      rule1LogicPath
+      '⬜ Not triggered',
+      'None found',
+      '✅ TRIGGERED',
+      'Same lobe nodule'
     );
   }
 
@@ -1928,9 +1994,10 @@ Per AJCC 8th Edition, separate tumor nodule in the same lobe automatically assig
       'pT1a',
       'override',
       undefined,
-      '🔬 **SPECIAL CASE: Superficial Spreading Tumor**',
-      `${getStagingSource()}: Superficial spreading tumor with invasive component limited to bronchial wall is classified as pT1a regardless of overall size.`,
-      rule1LogicPath
+      0, // Special case
+      `🔬 **SPECIAL CASE: Superficial Spreading Tumor**
+
+${getStagingSource()}: Superficial spreading tumor with invasive component limited to bronchial wall is classified as pT1a regardless of overall size.`
     );
   }
 
@@ -1946,14 +2013,14 @@ Per AJCC 8th Edition, separate tumor nodule in the same lobe automatically assig
       null,
       undefined,
       undefined,
-      '❌ **Rule 4 (Final Calculation): Cannot proceed**',
-      `**Checklist Status:**
-${rule1LogicPath}
-⬜ **Rule 2 (Anatomical Trump Cards):** No anatomical structures detected
-⬜ **Rule 3 (Lobe Map):** No laterality findings detected
-❌ **Rule 4 (Final Calculation):** No tumor size measurements found
+      4, // Rule 4 attempted but failed
+      `❌ **Rule 4 (Final Calculation): Cannot proceed**
 
-No tumor size measurements could be extracted from the report. Please ensure the report includes size information (e.g., "0.8 cm tumor" or "tumor size: 1.2 cm").`
+No tumor size measurements could be extracted from the report. Please ensure the report includes size information (e.g., "0.8 cm tumor" or "tumor size: 1.2 cm").`,
+      '⬜ Not triggered',
+      'None found',
+      '⬜ Not triggered',
+      'N/A'
     );
   }
 
@@ -1969,21 +2036,19 @@ No tumor size measurements could be extracted from the report. Please ensure the
       sizeRule.stage,
       'size_basis_cm',
       size_basis_cm,
-      `✅ **Triggered Rule 4: The Final Calculation**`,
-      `**Checklist Status:**
-${rule1LogicPath}
-⬜ **Rule 2 (Anatomical Trump Cards):** No anatomical structures detected
-⬜ **Rule 3 (Lobe Map):** No laterality findings detected
-✅ **Rule 4 (Final Calculation):** Size-based staging applied
-
----
+      4, // Rule 4 triggered
+      `**Triggered Rule 4: The Final Calculation (Size-Based)**
 
 ${measurementNote}
 
 **Stage Criteria:** ${sizeRule.criteria}
 **Assigned Stage:** ${sizeRule.stage}
 
-${getStagingSource()}`
+${getStagingSource()}`,
+      '⬜ Not triggered',
+      'None found',
+      '⬜ Not triggered',
+      'N/A'
     );
   }
 
@@ -1993,7 +2058,7 @@ ${getStagingSource()}`
     null,
     'size_basis_cm',
     size_basis_cm,
-    'Unable to determine staging',
+    0, // Unknown
     'Unable to determine pT category from the available information.'
   );
 }
