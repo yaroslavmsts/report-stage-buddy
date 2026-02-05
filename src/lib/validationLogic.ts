@@ -1575,9 +1575,18 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   };
 }
 
+// ============================================
+// MASTER PRECISION LOGIC - Hierarchy of Evidence
+// ============================================
 // Run the decision tree validation - now includes full TNM
 // When hasConflict is true, skip invasion-based overrides and use conservative size-based staging
 export function runValidation(inputs: ValidationInputs, rawText: string = '', hasConflict: boolean = false): ValidationResult {
+  // ============================================
+  // ADENOCARCINOMA MEASUREMENT (Priority 2)
+  // For adenocarcinomas, use ONLY the Invasive Size for pT category
+  // Discard total size for staging purposes
+  // ============================================
+  
   // Calculate derived values
   let estimated_invasive_size_cm: number | null = null;
   if (
@@ -1590,22 +1599,31 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
       inputs.measurements_cm.total_tumor_size_cm;
   }
 
-  // GOLDEN RULE #2: Total vs. Invasive Size
-  // If invasive size is available, use it for staging (even if total size is also provided)
+  // MASTER RULE: For adenocarcinomas, ONLY use invasive size
   let size_basis_cm: number | null = null;
   let usedInvasiveSize = false;
+  let sizeLogicPath = '';
   
   if (inputs.measurements_cm.invasive_size_cm !== null) {
     // Invasive size explicitly provided - use it (Golden Rule #2)
     size_basis_cm = inputs.measurements_cm.invasive_size_cm;
     usedInvasiveSize = true;
+    sizeLogicPath = `Invasive Size: ${size_basis_cm} cm (used for staging per AJCC 8th Ed.)`;
+    if (inputs.measurements_cm.total_tumor_size_cm !== null && 
+        inputs.measurements_cm.total_tumor_size_cm !== size_basis_cm) {
+      sizeLogicPath += ` | Total Size: ${inputs.measurements_cm.total_tumor_size_cm} cm (discarded)`;
+    }
   } else if (inputs.histology.is_invasive_nonmucinous_adenocarcinoma_with_lepidic_component && estimated_invasive_size_cm !== null) {
     // Estimated invasive size from percentage
     size_basis_cm = estimated_invasive_size_cm;
     usedInvasiveSize = true;
+    sizeLogicPath = `Estimated Invasive Size: ${size_basis_cm.toFixed(2)} cm (calculated from ${inputs.measurements_cm.percent_invasive_0_to_100}% of ${inputs.measurements_cm.total_tumor_size_cm} cm)`;
   } else {
     // Default to greatest dimension
     size_basis_cm = inputs.measurements_cm.greatest_dimension_cm;
+    if (size_basis_cm !== null) {
+      sizeLogicPath = `Tumor Size: ${size_basis_cm} cm (no invasive component specified)`;
+    }
   }
 
   // Calculate N and M stages from raw text
@@ -1614,48 +1632,18 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
   const icd10Result = getICD10Code(rawText);
   
   const n_category = nResult?.stage || 'pN0';
-  const m_category = mResult?.stage || 'pM0';
-
-  // Decision tree traversal using STAGING_RULES as Source of Truth
-  // Get override rules sorted by priority
-  const overrideRules = getRulesWithOverrides();
-  
-  // Collect all findings for override matching
-  const findings: string[] = [];
-  
-  // Add histology findings
-  if (inputs.histology.is_AIS) {
-    findings.push('AIS', 'adenocarcinoma in situ');
-  }
-  if (inputs.histology.is_MIA) {
-    findings.push('MIA', 'minimally invasive adenocarcinoma');
-  }
-  
-  // Add pleural invasion findings
-  if (inputs.pleural_invasion.has_visceral_pleural_invasion) {
-    findings.push('visceral pleural invasion');
-    if (inputs.pleural_invasion.pl_status) {
-      findings.push(inputs.pleural_invasion.pl_status);
-    }
-  }
-  
-  // Add direct invasion findings
-  if (inputs.direct_invasion.chest_wall) findings.push('chest wall');
-  if (inputs.direct_invasion.phrenic_nerve) findings.push('phrenic nerve');
-  if (inputs.direct_invasion.pericardium) findings.push('pericardium', 'parietal pericardium');
-  if (inputs.direct_invasion.diaphragm) findings.push('diaphragm');
-  if (inputs.direct_invasion.main_bronchus) findings.push('main bronchus');
-  if (inputs.direct_invasion.hilar_fat) findings.push('hilar fat', 'hilar soft tissue', 'direct extension into hilar');
+  let m_category = mResult?.stage || 'pM0';
 
   // Detect multiple primary tumors for (m) suffix
   const hasMultiplePrimaries = detectMultiplePrimaryTumors(rawText);
 
-  // Helper to build result with full TNM (and (m) suffix if applicable)
+  // Helper to build result with full TNM and Logic Path
   const buildResult = (
     applicability: ValidationResult['applicability'],
     t_category: string | null,
     basis: string | undefined,
     size_basis_cm_val: number | null | undefined,
+    logicPath: string,
     reason: string
   ): ValidationResult => {
     // Add (m) suffix for multiple primary tumors per AJCC standards
@@ -1669,10 +1657,13 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
     
     const survival = stage_group ? getSurvivalData(stage_group) : null;
     
+    // Build final reason with Logic Path
+    let finalReason = `**Logic Path:** ${logicPath}\n\n${reason}`;
+    
     // Add note about (m) suffix if applicable
-    const finalReason = hasMultiplePrimaries && t_category
-      ? `${reason} Note: (m) suffix added due to multiple primary tumors detected.`
-      : reason;
+    if (hasMultiplePrimaries && t_category) {
+      finalReason += `\n\n**Note:** (m) suffix added due to multiple primary tumors detected.`;
+    }
     
     return {
       applicability,
@@ -1688,13 +1679,17 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
     };
   };
 
-  // STEP 1: Check for special histology types (pTis, pT1mi)
+  // ============================================
+  // SPECIAL HISTOLOGY TYPES (Checked First)
+  // ============================================
+  
   if (inputs.histology.is_AIS) {
     return buildResult(
       'not_applicable',
       'pTis(AIS)',
       undefined,
       undefined,
+      'Histology → Adenocarcinoma in situ (AIS) detected',
       `${getStagingSource()}: Adenocarcinoma in situ is staged as pTis(AIS).`
     );
   }
@@ -1705,12 +1700,12 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
       'pT1mi',
       undefined,
       undefined,
+      'Histology → Minimally invasive adenocarcinoma (MIA) detected',
       `${getStagingSource()}: Minimally invasive adenocarcinoma is staged as pT1mi.`
     );
   }
 
   // GOLDEN RULE #3: Atelectasis/Pneumonitis
-  // Total lung collapse automatically upgrades to pT2
   if (inputs.atelectasis.has_total_lung_atelectasis || inputs.atelectasis.has_total_lung_pneumonitis) {
     const condition = inputs.atelectasis.has_total_lung_atelectasis ? 'total lung atelectasis' : 'total lung pneumonitis';
     return buildResult(
@@ -1718,28 +1713,19 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
       'pT2',
       'golden_rule',
       undefined,
+      `Golden Rule → ${condition} detected`,
       `⚠️ GOLDEN RULE: ${condition} detected. Per AJCC 8th Edition, a tumor of any size causing collapse of the entire lung is automatically staged as pT2.`
     );
   }
 
   // ============================================
-  // HIERARCHY OF EVIDENCE - Anatomical findings before tumor size
+  // HIERARCHY RULE (Priority 1)
+  // Check anatomical overrides BEFORE tumor size
   // ============================================
-  // Priority Order:
-  // 1. pT4 Anatomical Overrides (Diaphragm, Mediastinum, Carina, etc.)
-  // 2. pT4 Nodule Laterality (Different lobe, same lung - ipsilateral)
-  // 3. pM1a Nodule Laterality (Contralateral lung nodule)
-  // 4. pT3 Anatomical Overrides (Phrenic Nerve, Parietal Pleura PL3, Chest Wall)
-  // 5. pT3 Nodule Laterality (Same lobe nodule)
-  // 6. pT2a Anatomical Overrides (Hilar Fat, Visceral Pleura PL1/PL2)
-  // 7. Size-based staging
-  // ============================================
-
-  // --- RULE 1: ANATOMICAL OVERRIDES (T-Stage) ---
   
-  // pT4 ANATOMICAL: Diaphragm, Mediastinum, Carina, Heart, Great Vessels, etc.
+  // --- RULE 1A: pT4 ANATOMICAL OVERRIDE ---
+  // Diaphragm, Mediastinum, Carina, Heart, Great Vessels, Trachea, Esophagus, Vertebral Body
   const pT4Structures = detectPT4Structures(rawText, (finding: string, text: string): boolean => {
-    // Inline negation check for pT4 detection
     const normalizedText = text.toLowerCase();
     const normalizedFinding = finding.toLowerCase();
     const negationPhrases = ['not', 'no', 'without', 'negative', 'absent', 'intact', 'free'];
@@ -1757,46 +1743,74 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
       'pT4',
       'anatomical_override',
       undefined,
-      `⚠️ ANATOMICAL OVERRIDE (RULE 1 - pT4): Invasion of ${structureList} detected. Per AJCC 8th Edition, invasion of diaphragm, mediastinum, heart, great vessels, trachea, esophagus, vertebral body, recurrent laryngeal nerve, or carina automatically assigns pT4 regardless of tumor size.`
+      `pT4 triggered: anatomical invasion of ${structureList}`,
+      `⚠️ **HIERARCHY RULE 1 - ANATOMICAL OVERRIDE (pT4):** Invasion of ${structureList} detected. Per AJCC 8th Edition, invasion of diaphragm, mediastinum, heart, great vessels, trachea, esophagus, vertebral body, recurrent laryngeal nerve, or carina automatically assigns pT4 regardless of tumor size.`
     );
   }
 
-  // --- RULE 2: NODULE LATERALITY (The Lobe Map) ---
+  // --- RULE 1B: LATERALITY MAP (Nodule Overrides) ---
+  // Right Lung = [RUL, RML, RLL]; Left Lung = [LUL, LLL]
   const ipsilateralLobeInfo = detectIpsilateralLobeNodules(rawText);
   
   // Contralateral nodule → pM1a (Stage IVA)
   if (!hasConflict && ipsilateralLobeInfo.forcesM1a) {
-    // Update M category for contralateral nodule
-    const updatedMCategory = 'pM1a';
-    const stage_group = getStageGroup('pT1a', n_category, updatedMCategory); // Any T with M1a = Stage IVA
+    m_category = 'pM1a';
+    const sizeBasedT = size_basis_cm !== null ? getSizeBasedStage(size_basis_cm)?.stage || 'pT1a' : 'pT1a';
+    const stage_group = getStageGroup(sizeBasedT, n_category, m_category);
     const survival = getSurvivalData(stage_group);
+    
+    const lobeDetails = ipsilateralLobeInfo.primaryLobe && ipsilateralLobeInfo.noduleLobe
+      ? `Primary: ${ipsilateralLobeInfo.primaryLobe} (${ipsilateralLobeInfo.primaryLung} Lung) → Nodule: ${ipsilateralLobeInfo.noduleLobe} (${ipsilateralLobeInfo.noduleLung} Lung)`
+      : 'Contralateral lung nodule detected';
     
     return {
       applicability: 'applicable',
-      t_category: size_basis_cm !== null ? getSizeBasedStage(size_basis_cm)?.stage || 'pT1a' : 'pT1a',
+      t_category: sizeBasedT,
       n_category,
-      m_category: updatedMCategory,
+      m_category,
       stage_group,
       survival,
       icd10: icd10Result,
       basis: 'contralateral_nodule_override',
       size_basis_cm: size_basis_cm ?? undefined,
-      reason: ipsilateralLobeInfo.message || `⚠️ NODULE LATERALITY (RULE 2 - pM1a): Contralateral lung nodule detected. Per AJCC 8th Edition, a separate tumor nodule in the contralateral lung automatically assigns pM1a (Stage IVA).`,
+      reason: `**Logic Path:** pM1a triggered: contralateral lung nodule (${lobeDetails})
+
+⚠️ **LATERALITY MAP RULE (pM1a):** Separate tumor nodule in the contralateral lung detected.
+
+**AJCC Lobe Map:**
+• Right Lung = RUL, RML, RLL
+• Left Lung = LUL, LLL
+• **Contralateral (opposite lung) = pM1a → Stage IVA**
+
+Per AJCC 8th Edition, this automatically assigns pM1a staging.`,
     };
   }
 
   // Ipsilateral different lobe → pT4
   if (!hasConflict && ipsilateralLobeInfo.forcesT4) {
+    const lobeDetails = ipsilateralLobeInfo.primaryLobe && ipsilateralLobeInfo.noduleLobe
+      ? `Primary: ${ipsilateralLobeInfo.primaryLobe} → Nodule: ${ipsilateralLobeInfo.noduleLobe} (both ${ipsilateralLobeInfo.primaryLung} Lung)`
+      : 'different ipsilateral lobe nodule detected';
+    
     return buildResult(
       'applicable',
       'pT4',
       'ipsilateral_lobe_override',
       undefined,
-      ipsilateralLobeInfo.message || `⚠️ NODULE LATERALITY (RULE 2 - pT4): Separate tumor nodule in different ipsilateral lobe detected. Per AJCC 8th Edition, a separate nodule in a different lobe of the same lung automatically assigns pT4 staging.`
+      `pT4 triggered: different ipsilateral lobe nodule found (${lobeDetails})`,
+      `⚠️ **LATERALITY MAP RULE (pT4):** Separate tumor nodule in a different ipsilateral lobe detected.
+
+**AJCC Lobe Map:**
+• Right Lung = RUL, RML, RLL
+• Left Lung = LUL, LLL
+• **Different lobe, same lung = pT4**
+
+${ipsilateralLobeInfo.message || 'Per AJCC 8th Edition, this automatically assigns pT4 staging regardless of tumor size.'}`
     );
   }
 
-  // pT3 ANATOMICAL: Phrenic Nerve, Parietal Pleura (PL3), Chest Wall
+  // --- RULE 1C: pT3 ANATOMICAL OVERRIDE ---
+  // Phrenic Nerve, Parietal Pleura (PL3), Chest Wall, Parietal Pericardium
   const pT3AnatomicalFindings: string[] = [];
   if (inputs.direct_invasion.phrenic_nerve) pT3AnatomicalFindings.push('Phrenic Nerve');
   if (inputs.pleural_invasion.pl_status === 'PL3') pT3AnatomicalFindings.push('Parietal Pleura (PL3)');
@@ -1810,22 +1824,33 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
       'pT3',
       'anatomical_override',
       undefined,
-      `⚠️ ANATOMICAL OVERRIDE (RULE 1 - pT3): Direct invasion of ${structureList} detected. Per AJCC 8th Edition, invasion of phrenic nerve, parietal pleura (PL3), chest wall, or parietal pericardium automatically assigns pT3 regardless of tumor size.`
+      `pT3 triggered: anatomical invasion of ${structureList}`,
+      `⚠️ **HIERARCHY RULE 1 - ANATOMICAL OVERRIDE (pT3):** Direct invasion of ${structureList} detected. Per AJCC 8th Edition, invasion of phrenic nerve, parietal pleura (PL3), chest wall, or parietal pericardium automatically assigns pT3 regardless of tumor size.`
     );
   }
 
   // Same lobe nodule → pT3
   if (!hasConflict && ipsilateralLobeInfo.forcesT3) {
+    const lobeDetails = ipsilateralLobeInfo.primaryLobe 
+      ? `same lobe (${ipsilateralLobeInfo.primaryLobe})`
+      : 'same lobe';
+    
     return buildResult(
       'applicable',
       'pT3',
       'same_lobe_nodule_override',
       undefined,
-      ipsilateralLobeInfo.message || `⚠️ NODULE LATERALITY (RULE 2 - pT3): Separate tumor nodule in the same lobe detected. Per AJCC 8th Edition, this automatically assigns pT3 staging.`
+      `pT3 triggered: same lobe nodule found (${lobeDetails})`,
+      `⚠️ **LATERALITY MAP RULE (pT3):** Separate tumor nodule in the same lobe detected.
+
+**AJCC Lobe Map:** Same lobe nodule = pT3
+
+${ipsilateralLobeInfo.message || 'Per AJCC 8th Edition, this automatically assigns pT3 staging regardless of tumor size.'}`
     );
   }
 
-  // pT2a ANATOMICAL: Hilar Fat/Soft Tissue, Visceral Pleura (PL1/PL2)
+  // --- RULE 1D: pT2a ANATOMICAL OVERRIDE ---
+  // Hilar Fat/Soft Tissue, Visceral Pleura (PL1/PL2)
   const pT2aAnatomicalFindings: string[] = [];
   if (inputs.direct_invasion.hilar_fat) pT2aAnatomicalFindings.push('Direct extension into hilar fat/soft tissue');
   if (inputs.pleural_invasion.has_visceral_pleural_invasion && 
@@ -1840,11 +1865,12 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
       'pT2a',
       'anatomical_override',
       undefined,
-      `⚠️ ANATOMICAL OVERRIDE (RULE 1 - pT2a): ${structureList} detected. Per AJCC 8th Edition, visceral pleural invasion (PL1: beyond elastic layer, PL2: to pleural surface) or direct extension into hilar fat/soft tissue automatically assigns minimum pT2a regardless of tumor size.`
+      `pT2a triggered: ${structureList}`,
+      `⚠️ **HIERARCHY RULE 1 - ANATOMICAL OVERRIDE (pT2a):** ${structureList} detected. Per AJCC 8th Edition, visceral pleural invasion (PL1: beyond elastic layer, PL2: to pleural surface) or direct extension into hilar fat/soft tissue automatically assigns minimum pT2a regardless of tumor size.`
     );
   }
 
-  // STEP 3: Check superficial spreading override (special case)
+  // Superficial spreading override (special case)
   if (
     inputs.superficial_spreading.is_superficial_spreading_tumor &&
     inputs.superficial_spreading.invasive_component_limited_to_bronchial_wall
@@ -1854,17 +1880,22 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
       'pT1a',
       'override',
       undefined,
+      'Superficial spreading tumor with invasive component limited to bronchial wall',
       `${getStagingSource()}: Superficial spreading tumor with invasive component limited to bronchial wall is classified as pT1a regardless of overall size.`
     );
   }
 
-  // --- RULE 3: SIZE-BASED STAGING (After anatomical overrides) ---
+  // ============================================
+  // SIZE-BASED STAGING (Priority 2 - After Anatomical Overrides)
+  // ============================================
+  
   if (size_basis_cm === null) {
     return buildResult(
       'indeterminate',
       null,
       undefined,
       undefined,
+      'No tumor size measurements found',
       'No tumor size measurements could be extracted from the report. Please ensure the report includes size information (e.g., "0.8 cm tumor" or "tumor size: 1.2 cm").'
     );
   }
@@ -1877,16 +1908,22 @@ export function runValidation(inputs: ValidationInputs, rawText: string = '', ha
       sizeRule.stage,
       'size_basis_cm',
       size_basis_cm,
-      `${getStagingSource()}: ${sizeRule.criteria}. Measured size: ${size_basis_cm} cm. (Size-based staging applied after ruling out anatomical overrides.)`
+      `Size-based staging → ${sizeLogicPath}`,
+      `${getStagingSource()}: ${sizeRule.criteria}. 
+
+**Measurement Used:** ${usedInvasiveSize ? 'Invasive component size' : 'Greatest tumor dimension'}: ${size_basis_cm} cm
+
+(Size-based staging applied after ruling out anatomical overrides.)`
     );
   }
 
-  // Fallback - should not reach here given the logic above
+  // Fallback - should not reach here
   return buildResult(
     'outside_scope',
     null,
     'size_basis_cm',
     size_basis_cm,
+    'Unable to determine staging',
     'Unable to determine pT category from the available information.'
   );
 }
