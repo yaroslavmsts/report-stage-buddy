@@ -70,6 +70,34 @@ export interface ValidationInputs {
   };
 }
 
+export interface ClinicalChecklistData {
+  histologyVerification: {
+    status: 'identified' | 'not_identified' | 'not_applicable';
+    value: string;
+    isAdenocarcinoma: boolean;
+  };
+  measurementSelection: {
+    status: 'invasive_used' | 'total_used' | 'size_used' | 'not_applicable';
+    invasiveSize: number | null;
+    totalSize: number | null;
+    usedSize: number | null;
+    detail: string;
+  };
+  anatomicalScan: {
+    status: 'positive' | 'negative' | 'not_scanned';
+    findings: Record<string, 'Positive' | 'Negative' | 'N/A'>;
+    triggeredOverride: string | null;
+  };
+  lateralityCheck: {
+    status: 'unifocal' | 'same_lobe' | 'ipsilateral_different_lobe' | 'contralateral' | 'not_applicable';
+    primaryLobe: string | null;
+    noduleLobe: string | null;
+    detail: string;
+  };
+  clinicalVerdict: string;
+  stagingBasis: string;
+}
+
 export interface ValidationResult {
   applicability: 'applicable' | 'not_applicable' | 'indeterminate' | 'outside_scope';
   t_category: string | null;
@@ -81,6 +109,7 @@ export interface ValidationResult {
   basis?: string;
   size_basis_cm?: number | null;
   reason: string;
+  clinicalChecklist?: ClinicalChecklistData;
 }
 
 export interface ConflictInfo {
@@ -1083,9 +1112,11 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     }
   }
 
-  // Extract invasive size - also more flexible
+  // Extract invasive size - FUZZY EXTRACTION for maximum clinical flexibility
   // GOLDEN RULE #2: Invasive size takes precedence over total size
+  // Recognizes: 'Invasive component is X', 'Focus of invasion measures X', 'Invasive size X', etc.
   const invasiveSizePatterns = [
+    // Standard formats
     /invasive\s*size[:\s]+(\d+\.?\d*)\s*cm/i,  // "Invasive Size: 0.8 cm"
     /invasive\s*(component|focus|portion)[:\s]+(\d+\.?\d*)\s*cm/i,
     /invasive\s*tumor[:\s]+(\d+\.?\d*)\s*cm/i,
@@ -1093,15 +1124,28 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     /(\d+\.?\d*)\s*cm\s+invasive/i,
     /invasive[:\s]+(\d+\.?\d*)\s*cm/i,
     /size\s*of\s*invasive\s*(component)?[:\s]+(\d+\.?\d*)\s*cm/i,
+    
+    // FUZZY PATTERNS - Clinical narrative variations
+    /invasive\s*component\s*(?:is|measures?|measuring)\s*(\d+\.?\d*)\s*cm/i,  // "Invasive component is 0.4 cm"
+    /focus\s*of\s*invasion\s*(?:measures?|measuring|is)\s*(\d+\.?\d*)\s*cm/i,  // "Focus of invasion measures 0.5 cm"
+    /invasive\s*focus\s*(?:measures?|measuring|is|of)\s*(\d+\.?\d*)\s*cm/i,  // "Invasive focus of 0.3 cm"
+    /(?:the\s*)?invasive\s*(?:component|focus|portion)\s*(?:measures?|is|of)?\s*(\d+\.?\d*)\s*cm/i,
+    /(\d+\.?\d*)\s*cm\s*(?:focus\s*of\s*)?invasion/i,  // "0.4 cm focus of invasion"
+    /(?:focus|area|region)\s*of\s*(?:invasive|invasion)\s*(?:component\s*)?(?:measures?|measuring|is)?\s*(\d+\.?\d*)\s*cm/i,
+    /acinar\s*(?:invasion|component)\s*(?:measures?|measuring)\s*(\d+\.?\d*)\s*cm/i,  // "Acinar invasion measures 0.8 cm"
+    /(?:discrete|single)\s*focus\s*of\s*(?:acinar\s*)?invasion\s*(?:measures?|measuring)\s*(\d+\.?\d*)\s*cm/i,
+    /invasion\s*(?:is\s*)?(?:limited\s*to|confined\s*to|measuring)\s*(\d+\.?\d*)\s*cm/i,
+    /(\d+\.?\d*)\s*cm\s*invasive\s*(?:component|focus|portion|tumor)/i,
   ];
 
   for (const pattern of invasiveSizePatterns) {
     const match = text.match(pattern);
     if (match) {
+      // Find the first captured group that is a valid number
       const size = parseFloat(match[2] || match[1]);
       if (!isNaN(size) && size > 0) {
         inputs.measurements_cm.invasive_size_cm = size;
-        extractedText.measurementFindings.push(`Invasive size: ${size} cm`);
+        extractedText.measurementFindings.push(`Invasive component: ${size} cm`);
         break;
       }
     }
@@ -1720,6 +1764,79 @@ ${triggeredRuleDetails}`;
       finalReason += `\n\n**Note:** (m) suffix added due to multiple primary tumors detected.`;
     }
     
+    // Determine clinical verdict and staging basis
+    let clinicalVerdict = '';
+    let stagingBasis = '';
+    
+    if (triggeredRuleNum === 1 && usedInvasiveSize) {
+      clinicalVerdict = `Final stage ${finalTCategory} determined by invasive component measurement (${size_basis_cm_val} cm) per CAP Note A protocol for adenocarcinomas with lepidic pattern.`;
+      stagingBasis = 'Invasive Component Rule';
+    } else if (triggeredRuleNum === 2) {
+      clinicalVerdict = `Final stage ${finalTCategory} determined by anatomical invasion findings. Tumor size superseded by structural involvement.`;
+      stagingBasis = 'Anatomical Override';
+    } else if (triggeredRuleNum === 3) {
+      clinicalVerdict = `Final stage ${finalTCategory} determined by nodule distribution pattern per AJCC laterality criteria.`;
+      stagingBasis = 'Laterality Override';
+    } else if (triggeredRuleNum === 4) {
+      clinicalVerdict = `Final stage ${finalTCategory} determined by greatest tumor dimension (${size_basis_cm_val} cm). No anatomical or laterality overrides applicable.`;
+      stagingBasis = 'Numerical Size';
+    } else {
+      clinicalVerdict = `Staging determination pending additional data.`;
+      stagingBasis = 'Incomplete Data';
+    }
+    
+    // Build clinical checklist data
+    const clinicalChecklist: ClinicalChecklistData = {
+      histologyVerification: {
+        status: isAdenocarcinoma ? 'identified' : 'not_identified',
+        value: isAdenocarcinoma 
+          ? (inputs.histology.is_invasive_nonmucinous_adenocarcinoma_with_lepidic_component 
+              ? 'Invasive adenocarcinoma with lepidic component' 
+              : 'Adenocarcinoma identified')
+          : 'Non-adenocarcinoma histology',
+        isAdenocarcinoma,
+      },
+      measurementSelection: {
+        status: usedInvasiveSize ? 'invasive_used' : (size_basis_cm_val ? 'size_used' : 'not_applicable'),
+        invasiveSize: inputs.measurements_cm.invasive_size_cm,
+        totalSize: inputs.measurements_cm.total_tumor_size_cm,
+        usedSize: size_basis_cm_val ?? null,
+        detail: usedInvasiveSize
+          ? `Invasive Size (${inputs.measurements_cm.invasive_size_cm} cm) prioritized over Total Size (${inputs.measurements_cm.total_tumor_size_cm ?? 'N/A'} cm)`
+          : (size_basis_cm_val 
+              ? `Greatest Dimension: ${size_basis_cm_val} cm` 
+              : 'No measurement extracted'),
+      },
+      anatomicalScan: {
+        status: (rule2Status?.includes('TRIGGERED')) ? 'positive' : 'negative',
+        findings: {
+          'Hilar Fat': inputs.direct_invasion.hilar_fat ? 'Positive' : 'Negative',
+          'Visceral Pleura': inputs.pleural_invasion.has_visceral_pleural_invasion 
+            ? `Positive (${inputs.pleural_invasion.pl_status || 'PL1'})` as 'Positive'
+            : 'Negative',
+          'Phrenic Nerve': inputs.direct_invasion.phrenic_nerve ? 'Positive' : 'Negative',
+          'Chest Wall': inputs.direct_invasion.chest_wall ? 'Positive' : 'Negative',
+          'Mediastinum': inputs.pT4_invasion?.mediastinum ? 'Positive' : 'Negative',
+          'Carina': inputs.pT4_invasion?.carina ? 'Positive' : 'Negative',
+        },
+        triggeredOverride: rule2Details || null,
+      },
+      lateralityCheck: {
+        status: (rule3Status?.includes('TRIGGERED')) 
+          ? (rule3Details?.toLowerCase().includes('contralateral') ? 'contralateral' 
+             : rule3Details?.toLowerCase().includes('same lobe') ? 'same_lobe' 
+             : 'ipsilateral_different_lobe')
+          : 'unifocal',
+        primaryLobe: null, // Will be set by ipsilateralLobeInfo
+        noduleLobe: null,
+        detail: rule3Status?.includes('TRIGGERED') 
+          ? (rule3Details || 'Multi-nodal distribution detected')
+          : 'Unifocal',
+      },
+      clinicalVerdict,
+      stagingBasis,
+    };
+    
     return {
       applicability,
       t_category: finalTCategory,
@@ -1731,6 +1848,7 @@ ${triggeredRuleDetails}`;
       basis,
       size_basis_cm: size_basis_cm_val ?? undefined,
       reason: finalReason,
+      clinicalChecklist,
     };
   };
 

@@ -4,7 +4,83 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert, SubmissionAlert, IpsilateralLobeInfo } from '@/lib/validationLogic';
+import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert, SubmissionAlert, IpsilateralLobeInfo, ClinicalChecklistData } from '@/lib/validationLogic';
+import { ClinicalChecklist, ChecklistItem } from '@/components/ClinicalChecklist';
+
+// Helper function to build checklist items from clinical checklist data
+function buildChecklistItems(checklist: ClinicalChecklistData): ChecklistItem[] {
+  const items: ChecklistItem[] = [];
+  
+  // 1. Histology Verification
+  items.push({
+    label: 'Histology Verification',
+    status: checklist.histologyVerification.isAdenocarcinoma ? 'passed' : 'not_applicable',
+    value: checklist.histologyVerification.value,
+  });
+  
+  // 2. Measurement Selection
+  const measurementStatus = checklist.measurementSelection.status === 'invasive_used' 
+    ? 'triggered' 
+    : (checklist.measurementSelection.status === 'size_used' ? 'passed' : 'not_applicable');
+  
+  items.push({
+    label: 'Measurement Selection',
+    status: measurementStatus,
+    value: checklist.measurementSelection.status === 'invasive_used'
+      ? `Invasive Size (${checklist.measurementSelection.invasiveSize} cm) prioritized`
+      : checklist.measurementSelection.status === 'size_used'
+        ? `Greatest Dimension: ${checklist.measurementSelection.usedSize} cm`
+        : 'No measurement available',
+    detail: checklist.measurementSelection.status === 'invasive_used' && checklist.measurementSelection.totalSize
+      ? `Total Size (${checklist.measurementSelection.totalSize} cm) discarded per CAP Note A`
+      : undefined,
+  });
+  
+  // 3. Anatomical Scan
+  const anatomicalFindings = Object.entries(checklist.anatomicalScan.findings)
+    .filter(([_, value]) => value !== 'N/A')
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(' | ');
+  
+  const positiveAnatomical = Object.values(checklist.anatomicalScan.findings)
+    .some(v => v === 'Positive' || (typeof v === 'string' && v.startsWith('Positive')));
+  
+  items.push({
+    label: 'Anatomical Scan',
+    status: positiveAnatomical ? 'triggered' : 'negative',
+    value: positiveAnatomical 
+      ? checklist.anatomicalScan.triggeredOverride || 'Override triggered'
+      : 'No anatomical overrides',
+    detail: anatomicalFindings.substring(0, 80) + (anatomicalFindings.length > 80 ? '...' : ''),
+  });
+  
+  // 4. Laterality Check
+  const lateralityStatus = checklist.lateralityCheck.status;
+  let lateralityValue = 'Unifocal';
+  let lateralityStatusType: ChecklistItem['status'] = 'negative';
+  
+  if (lateralityStatus === 'contralateral') {
+    lateralityValue = 'Contralateral nodule → pM1a';
+    lateralityStatusType = 'triggered';
+  } else if (lateralityStatus === 'ipsilateral_different_lobe') {
+    lateralityValue = 'Different ipsilateral lobe → pT4';
+    lateralityStatusType = 'triggered';
+  } else if (lateralityStatus === 'same_lobe') {
+    lateralityValue = 'Same lobe nodule → pT3';
+    lateralityStatusType = 'triggered';
+  }
+  
+  items.push({
+    label: 'Laterality Check',
+    status: lateralityStatusType,
+    value: lateralityValue,
+    detail: checklist.lateralityCheck.detail !== 'Unifocal' 
+      ? checklist.lateralityCheck.detail 
+      : undefined,
+  });
+  
+  return items;
+}
 
 interface ValidationResultProps {
   comparison: {
@@ -413,6 +489,15 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
             ))}
           </AlertDescription>
         </Alert>
+      )}
+
+      {/* Clinical Validation Checklist - NEW UI */}
+      {calculatedResult.clinicalChecklist && (
+        <ClinicalChecklist
+          items={buildChecklistItems(calculatedResult.clinicalChecklist)}
+          clinicalVerdict={calculatedResult.clinicalChecklist.clinicalVerdict}
+          stagingBasis={calculatedResult.clinicalChecklist.stagingBasis}
+        />
       )}
 
       {/* AJCC Prognostic Group Card - Main staging focus */}
