@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert, SubmissionAlert, IpsilateralLobeInfo, ClinicalChecklistData } from '@/lib/validationLogic';
+import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert, SubmissionAlert, IpsilateralLobeInfo, ClinicalChecklistData, GateExecution } from '@/lib/validationLogic';
 import { ClinicalChecklist, ChecklistItem } from '@/components/ClinicalChecklist';
 
 // Helper function to build checklist items from clinical checklist data
@@ -491,12 +491,13 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
         </Alert>
       )}
 
-      {/* Clinical Validation Checklist - NEW UI */}
+      {/* Clinical Validation Checklist - NEW UI with Logic Execution Table */}
       {calculatedResult.clinicalChecklist && (
         <ClinicalChecklist
           items={buildChecklistItems(calculatedResult.clinicalChecklist)}
           clinicalVerdict={calculatedResult.clinicalChecklist.clinicalVerdict}
           stagingBasis={calculatedResult.clinicalChecklist.stagingBasis}
+          gateExecutions={calculatedResult.clinicalChecklist.gateExecutions}
         />
       )}
 
