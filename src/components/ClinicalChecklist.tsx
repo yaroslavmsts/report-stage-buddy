@@ -1,5 +1,7 @@
-import { CheckCircle2, Circle, AlertCircle, Minus } from 'lucide-react';
+import { CheckCircle2, Circle, AlertCircle, Minus, StopCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { GateExecution } from '@/lib/validationLogic';
 
 export interface ChecklistItem {
   label: string;
@@ -12,9 +14,10 @@ interface ClinicalChecklistProps {
   items: ChecklistItem[];
   clinicalVerdict: string;
   stagingBasis: string;
+  gateExecutions?: GateExecution[];
 }
 
-export function ClinicalChecklist({ items, clinicalVerdict, stagingBasis }: ClinicalChecklistProps) {
+export function ClinicalChecklist({ items, clinicalVerdict, stagingBasis, gateExecutions }: ClinicalChecklistProps) {
   const getStatusIcon = (status: ChecklistItem['status']) => {
     switch (status) {
       case 'passed':
@@ -49,6 +52,16 @@ export function ClinicalChecklist({ items, clinicalVerdict, stagingBasis }: Clin
     }
   };
 
+  const getGateStatusStyle = (gate: GateExecution) => {
+    if (gate.stoppedHere) {
+      return 'bg-primary/10 text-primary font-semibold';
+    }
+    if (gate.status === 'Triggered') {
+      return 'bg-success/10 text-success';
+    }
+    return 'text-muted-foreground';
+  };
+
   return (
     <Card className="border-primary/20 bg-primary/5">
       <CardHeader className="pb-2 sm:pb-3">
@@ -57,9 +70,70 @@ export function ClinicalChecklist({ items, clinicalVerdict, stagingBasis }: Clin
           Validation Checklist
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
+        {/* Logic Execution Debug Table */}
+        {gateExecutions && gateExecutions.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Logic Execution
+            </h4>
+            <div className="rounded-md border border-border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="h-8 text-xs font-semibold">Gate</TableHead>
+                    <TableHead className="h-8 text-xs font-semibold">Name</TableHead>
+                    <TableHead className="h-8 text-xs font-semibold">Status</TableHead>
+                    <TableHead className="h-8 text-xs font-semibold">Detail</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {gateExecutions.map((gate, index) => (
+                    <TableRow key={index} className={getGateStatusStyle(gate)}>
+                      <TableCell className="py-2 text-xs font-medium">
+                        {gate.gate}
+                      </TableCell>
+                      <TableCell className="py-2 text-xs">
+                        {gate.name}
+                      </TableCell>
+                      <TableCell className="py-2 text-xs">
+                        <span className="inline-flex items-center gap-1">
+                          {gate.status === 'Triggered' ? (
+                            gate.stoppedHere ? (
+                              <>
+                                <StopCircle className="h-3 w-3" />
+                                <span className="font-semibold">Triggered → STOP</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="h-3 w-3" />
+                                Triggered
+                              </>
+                            )
+                          ) : (
+                            <>
+                              <Minus className="h-3 w-3" />
+                              Skipped
+                            </>
+                          )}
+                        </span>
+                      </TableCell>
+                      <TableCell className="py-2 text-xs max-w-[200px] truncate">
+                        {gate.detail}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        )}
+
         {/* Checklist Grid */}
         <div className="space-y-2">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Extraction Summary
+          </h4>
           {items.map((item, index) => (
             <div 
               key={index}
