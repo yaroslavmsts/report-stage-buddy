@@ -528,6 +528,11 @@ export function detectPT4Structures(
         /invad(es?|ing|ed)\s*(the\s*)?diaphragm/i,
         /diaphragm(atic)?\s*invasion/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?diaphragm/i,
+        /extends?\s*(into|to|through)\s*(the\s*)?diaphragm/i,
+        /diaphragm\s*(is\s*)?(invaded|involved|infiltrated)/i,
+        /involves?\s*(the\s*)?diaphragm/i,
+        /infiltrat(es?|ing|ed)\s*(the\s*)?diaphragm/i,
+        /tumor\s*(extends?|invades?|involves?)\s*(into\s*)?(the\s*)?diaphragm/i,
       ],
       display: 'Diaphragm'
     },
@@ -1730,7 +1735,7 @@ export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean)
     const survival = stage_group ? getSurvivalData(stage_group) : null;
     
     // Build Gate Execution table for reasoning output
-    let gateTable = `## SINGLE-PASS 4-GATE ARCHITECTURE v9.0.0
+    let gateTable = `## SINGLE-PASS 4-GATE ARCHITECTURE v10.0.0
 
 ---
 
@@ -1791,15 +1796,19 @@ ${gateDetail}`;
         isAdenocarcinoma,
       },
       measurementSelection: {
-        status: (triggeredGate === 1) ? 'invasive_used' : (size_basis_cm_val ? 'size_used' : 'not_applicable'),
+        status: (triggeredGate === 2) ? 'invasive_used' 
+             : (triggeredGate === 1) ? 'not_applicable'
+             : (size_basis_cm_val ? 'size_used' : 'not_applicable'),
         invasiveSize: inputs.measurements_cm.invasive_size_cm,
         totalSize: inputs.measurements_cm.total_tumor_size_cm,
-        usedSize: size_basis_cm_val ?? null,
+        usedSize: (triggeredGate === 1) ? null : (size_basis_cm_val ?? null),
         detail: (triggeredGate === 1)
-          ? `Invasive Size (${inputs.measurements_cm.invasive_size_cm} cm) used; Total Size (${inputs.measurements_cm.total_tumor_size_cm ?? 'N/A'} cm) discarded`
-          : (size_basis_cm_val 
-              ? `Total Size: ${size_basis_cm_val} cm` 
-              : 'No measurement extracted'),
+          ? 'Size overridden by anatomical finding'
+          : (triggeredGate === 2)
+            ? `Invasive Size (${inputs.measurements_cm.invasive_size_cm} cm) used; Total Size (${inputs.measurements_cm.total_tumor_size_cm ?? 'N/A'} cm) discarded per CAP Note A`
+            : (size_basis_cm_val 
+                ? `Total Size: ${size_basis_cm_val} cm` 
+                : 'No measurement extracted'),
       },
       anatomicalScan: {
         status: (triggeredGate === 1) ? 'positive' : 'negative',
@@ -1809,10 +1818,16 @@ ${gateDetail}`;
           'Phrenic Nerve': inputs.direct_invasion.phrenic_nerve ? 'Positive' : (pT4Override.structures.includes('Phrenic Nerve') ? 'Positive' : 'Negative'),
           'Diaphragm': inputs.direct_invasion.diaphragm ? 'Positive' : (pT4Override.structures.includes('Diaphragm') ? 'Positive' : 'Negative'),
           'Mediastinum': pT4Override.structures.includes('Mediastinum') ? 'Positive' : 'Negative',
+          'Heart': pT4Override.structures.includes('Heart') ? 'Positive' : 'Negative',
+          'Great Vessels': pT4Override.structures.includes('Great Vessels') ? 'Positive' : 'Negative',
+          'Trachea': pT4Override.structures.includes('Trachea') ? 'Positive' : 'Negative',
+          'Carina': pT4Override.structures.includes('Carina') ? 'Positive' : 'Negative',
+          'Esophagus': pT4Override.structures.includes('Esophagus') ? 'Positive' : 'Negative',
+          'Recurrent Laryngeal Nerve': pT4Override.structures.includes('Recurrent Laryngeal Nerve') ? 'Positive' : 'Negative',
+          'Vertebral Body': pT4Override.structures.includes('Vertebral Body') ? 'Positive' : 'Negative',
           'Visceral Pleura': inputs.pleural_invasion.has_visceral_pleural_invasion 
             ? `Positive (${inputs.pleural_invasion.pl_status || 'PL1'})` as 'Positive'
             : 'Negative',
-          'Carina': pT4Override.structures.includes('Carina') ? 'Positive' : 'Negative',
         },
         triggeredOverride: (triggeredGate === 1) ? gateDetail : null,
       },
