@@ -59,11 +59,11 @@ function generateClinicalReasoning(
       
       if (structureName) {
         sentences.push(
-          `${tCat} assigned due to ${structureName} involvement, overriding mass size. Per AJCC 8th Edition, anatomical invasion takes absolute priority over tumor dimensions.`
+          `Direct invasion into the ${structureName} was identified, triggering a ${tCat} classification and overriding tumor size. Per AJCC 8th Edition, anatomical invasion takes absolute priority over tumor dimensions.`
         );
       } else {
         sentences.push(
-          `${tCat} assigned due to direct anatomical invasion, overriding standard size-based staging per AJCC 8th Edition.`
+          `Direct anatomical invasion was identified, triggering a ${tCat} classification and overriding standard size-based staging per AJCC 8th Edition.`
         );
       }
     } else if (basis.includes('Laterality')) {

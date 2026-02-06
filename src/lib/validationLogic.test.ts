@@ -883,4 +883,98 @@ describe('Integration: Deterministic Gated Engine', () => {
       expect(result.t_category).not.toBe('pT3');
     });
   });
+
+  describe('Bridge Pattern: 80-char bridge for ALL Gate 1 structures', () => {
+    // pT4 bridge patterns
+    it('"invasion into the chest wall and mediastinal fat" → pT4 (mediastinum bridge)', () => {
+      const report = 'Squamous cell carcinoma 3.0 cm. There is evidence of invasion into the chest wall and mediastinal fat.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('"invasion into the pleura and phrenic nerve" → pT4 (phrenic nerve bridge)', () => {
+      const report = 'Adenocarcinoma 2.5 cm. Direct invasion into the visceral pleura and phrenic nerve.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('"invasion extending to the soft tissue and diaphragm" → pT4 (diaphragm bridge)', () => {
+      const report = 'Squamous cell carcinoma 1.8 cm. There is invasion extending to the soft tissue and diaphragm.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('"invasion into the pericardium and great vessels" → pT4 (great vessels bridge)', () => {
+      const report = 'Large cell carcinoma 5.0 cm. Evidence of invasion into the pericardium and great vessels.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('"invasion into the adjacent structures and esophagus" → pT4 (esophagus bridge)', () => {
+      const report = 'Squamous cell carcinoma 4.0 cm. There is invasion into the adjacent structures and esophagus.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('"invasion of the surrounding tissue and heart" → pT4 (heart bridge)', () => {
+      const report = 'Adenocarcinoma 3.5 cm. Invasion of the surrounding tissue and heart.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('"invasion into the hilum and trachea" → pT4 (trachea bridge)', () => {
+      const report = 'Squamous cell carcinoma 2.0 cm. There is invasion into the hilum and trachea.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('"invasion into the soft tissue and carina" → pT4 (carina bridge)', () => {
+      const report = 'Adenocarcinoma 1.5 cm. Direct invasion into the soft tissue and carina.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    // pT3 bridge patterns
+    it('"invasion into the pleura and chest wall" → pT3 (chest wall bridge via parseReport)', () => {
+      const report = 'Squamous cell carcinoma 2.0 cm. There is invasion into the pleura and chest wall.';
+      const parsed = parsePathologyReport(report);
+      expect(parsed.inputs.direct_invasion.chest_wall).toBe(true);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT3');
+    });
+
+    it('"invasion extending to the soft tissue and ribs" → pT3 (rib bridge)', () => {
+      const report = 'Squamous cell carcinoma 1.5 cm. There is invasion extending to the soft tissue and ribs.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT3');
+    });
+
+    // Negation should still work with bridge patterns
+    it('negated bridge pattern does NOT trigger override', () => {
+      const report = 'Squamous cell carcinoma 3.0 cm. No invasion into the chest wall or mediastinum.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).not.toBe('pT4');
+      expect(result.t_category).not.toBe('pT3');
+    });
+
+    // Pathologist voice check
+    it('bridge-triggered override uses pathologist voice in reasoning', () => {
+      const report = 'Squamous cell carcinoma 3.0 cm. There is evidence of invasion into the chest wall and mediastinal fat.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+      // Verify the gate detail mentions the structure
+      expect(result.reason).toContain('Mediastinum');
+    });
+  });
 });
