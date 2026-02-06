@@ -9,10 +9,9 @@ interface ClinicalReasoningProps {
 }
 
 /**
- * Generates exactly 2-3 clinical-grade reasoning sentences:
- * 1. pT selection justification (metric/override)
- * 2. Anatomical verification / exclusion of distant disease
- * 3. Final prognostic group alignment
+ * Generates 2-3 clear, clinical-grade reasoning sentences
+ * written as if a pathologist is explaining their thoughts in a finalized report.
+ * No gate/machine terminology — natural pathologist voice only.
  */
 function generateClinicalReasoning(
   parsedReport: ParsedReport,
@@ -28,72 +27,93 @@ function generateClinicalReasoning(
 
     if (basis.includes('Component') && checklist.measurementSelection.invasiveSize) {
       const totalSize = checklist.measurementSelection.totalSize;
-      sentences.push(
-        `${tCat} assigned based on a ${checklist.measurementSelection.invasiveSize} cm invasive focus${totalSize ? `, overriding the ${totalSize} cm total adenocarcinoma size` : ''} per AJCC Note A.`
-      );
+      if (totalSize) {
+        sentences.push(
+          `Based on the ${checklist.measurementSelection.invasiveSize} cm invasive component, this case is staged as ${tCat} despite the larger ${totalSize} cm total tumor size.`
+        );
+      } else {
+        sentences.push(
+          `Based on the ${checklist.measurementSelection.invasiveSize} cm invasive component, this case is staged as ${tCat}.`
+        );
+      }
     } else if (basis.includes('Anatomical')) {
       const triggeredGate = checklist.gateExecutions?.find(g => g.stoppedHere);
-      const detail = triggeredGate?.detail || 'anatomical structure invasion';
-      sentences.push(
-        `${tCat} assigned based on anatomical override — ${detail.replace(/→.*/, '').trim()} — which supersedes size-based staging per AJCC 8th Edition.`
-      );
+      const rawDetail = triggeredGate?.detail || '';
+      // Extract the anatomical site name without gate/arrow notation
+      const site = rawDetail.replace(/→.*/, '').replace(/Gate\s*\d+/gi, '').trim();
+      if (site) {
+        sentences.push(
+          `The tumor demonstrates direct invasion of ${site.toLowerCase()}, which requires classification as ${tCat} regardless of tumor size.`
+        );
+      } else {
+        sentences.push(
+          `An anatomical finding requires classification as ${tCat}, overriding standard size-based staging.`
+        );
+      }
     } else if (basis.includes('Laterality')) {
-      const lateralDetail = checklist.lateralityCheck.detail || 'multi-lobe involvement';
-      sentences.push(
-        `${calculatedResult.m_category === 'pM1a' ? 'pM1a' : tCat} assigned based on laterality assessment: ${lateralDetail}.`
-      );
+      const lateralDetail = checklist.lateralityCheck.detail || '';
+      if (calculatedResult.m_category === 'pM1a') {
+        sentences.push(
+          `A tumor nodule was identified in the contralateral lung, classifying this case as pM1a.`
+        );
+      } else if (lateralDetail.toLowerCase().includes('different') && lateralDetail.toLowerCase().includes('lobe')) {
+        sentences.push(
+          `A separate tumor nodule in a different ipsilateral lobe was identified, requiring ${tCat} classification.`
+        );
+      } else if (lateralDetail.toLowerCase().includes('same lobe')) {
+        sentences.push(
+          `A satellite nodule within the same lobe was identified, contributing to ${tCat} classification.`
+        );
+      } else {
+        sentences.push(
+          `Laterality assessment identified multi-lobe involvement, resulting in ${tCat} classification.`
+        );
+      }
     } else {
       // Default size-based
       const size = calculatedResult.size_basis_cm;
       sentences.push(
-        `${tCat} assigned based on tumor greatest dimension of ${size != null ? size.toFixed(1) + ' cm' : 'measured size'} using standard AJCC 8th Edition size criteria.`
+        `The tumor measures ${size != null ? size.toFixed(1) + ' cm' : 'within the reported dimensions'} in greatest dimension, corresponding to ${tCat} by standard size criteria.`
       );
     }
   } else {
     sentences.push(
-      `${tCat} determined by the staging engine based on available pathology data.`
+      `${tCat} was determined based on the available pathology findings.`
     );
   }
 
-  // --- Sentence 2: Anatomical Verification ---
+  // --- Sentence 2: Exclusion / Verification ---
   const hasAnatomicalOverride = parsedReport.pT4Override?.detected;
-  const hasIpsilateral = parsedReport.ipsilateralLobeInfo?.isDifferentLobesSameLung;
   const hasContralateral = parsedReport.ipsilateralLobeInfo?.isContralateralNodule;
+  const hasIpsilateral = parsedReport.ipsilateralLobeInfo?.isDifferentLobesSameLung;
   const hasSameLobe = parsedReport.ipsilateralLobeInfo?.isSameLobeNodule;
 
   if (hasAnatomicalOverride) {
     sentences.push(
-      `Anatomical scan identified invasion of critical structures (${parsedReport.pT4Override.structures.join(', ')}), confirming pT4 classification.`
+      `Critical structure invasion (${parsedReport.pT4Override.structures.join(', ')}) was confirmed on review of the submitted sections.`
     );
   } else if (hasContralateral) {
     sentences.push(
-      `Laterality mapping detected a contralateral lung nodule, classifying distant metastasis as pM1a per AJCC criteria.`
+      `The contralateral nodule was morphologically consistent with the primary tumor, supporting metastatic classification.`
     );
-  } else if (hasIpsilateral) {
+  } else if (hasIpsilateral || hasSameLobe) {
     sentences.push(
-      `Evaluation confirmed a separate tumor nodule in a different ipsilateral lobe (${parsedReport.ipsilateralLobeInfo?.primaryLobe} → ${parsedReport.ipsilateralLobeInfo?.noduleLobe}), mandating pT4 staging.`
-    );
-  } else if (hasSameLobe) {
-    sentences.push(
-      `A satellite nodule in the same lobe was identified, contributing to pT3 classification per AJCC 8th Edition.`
+      `No additional anatomical overrides or distant metastatic involvement were identified in the provided sections.`
     );
   } else {
     sentences.push(
-      `Evaluation of anatomical sites confirmed no evidence of hilar fat, visceral pleural, or mediastinal involvement requiring staging override.`
+      `No anatomical overrides or nodal involvements were identified in the provided sections.`
     );
   }
 
   // --- Sentence 3: Final Consensus ---
   if (calculatedResult.stage_group) {
-    const histoLabel = checklist?.histologyVerification.isAdenocarcinoma
-      ? 'adenocarcinoma histology'
-      : 'tumor histology';
     const nodalLabel = calculatedResult.n_category
-      ? `${calculatedResult.n_category} nodal status`
+      ? `${calculatedResult.n_category === 'pN0' ? 'negative' : 'positive'} nodal status`
       : 'negative nodal status';
 
     sentences.push(
-      `The integration of ${histoLabel} and ${nodalLabel} results in a definitive ${calculatedResult.stage_group} classification.`
+      `The overall findings are consistent with a Stage ${calculatedResult.stage_group} classification with ${nodalLabel}.`
     );
   }
 

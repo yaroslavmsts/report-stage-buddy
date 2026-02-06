@@ -210,7 +210,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
 
       {/* ============================================================
           SECTION 2: CLINICAL REASONING (MIDDLE)
-          2-3 clinical-grade sentences
+          2-3 natural pathologist-voice sentences
           ============================================================ */}
       <ClinicalReasoning
         parsedReport={parsedReport}
@@ -219,8 +219,8 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
       />
 
       {/* ============================================================
-          SECTION 3: STAGING RESULT (BOTTOM)
-          Main status card + AJCC Prognostic Group + Survival/Billing
+          SECTION 3: SUGGESTED STAGE (LARGE)
+          Main status card with prominent stage display
           ============================================================ */}
 
       {/* Main Status Card */}
@@ -261,64 +261,14 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
         </Card>
       )}
 
-      {/* Smart Value-Adds: Survival & Billing */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-        {calculatedResult.survival && (
-          <Card className="border border-success/30 bg-success/5">
-            <CardHeader className="pb-2 sm:pb-3">
-              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                <Heart className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
-                Prognostic Outlook
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-1">5-Year Pathologic Survival</p>
-                <p className={`text-2xl sm:text-3xl font-bold ${getSurvivalColor(survivalPercentage)}`}>
-                  {calculatedResult.survival.five_year_survival}
-                </p>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2 sm:h-2.5">
-                <div 
-                  className={`h-full rounded-full transition-all duration-500 ${getSurvivalBgColor(survivalPercentage)}`}
-                  style={{ width: `${survivalPercentage}%` }}
-                />
-              </div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">
-                Based on {calculatedResult.stage_group} pathologic staging
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {calculatedResult.icd10 && (
-          <Card className="border border-info/30 bg-info/5">
-            <CardHeader className="pb-2 sm:pb-3">
-              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
-                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-info" />
-                Billing & Coding
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-1">ICD-10-CM Code</p>
-                <p className="text-2xl sm:text-3xl font-bold text-info">{calculatedResult.icd10.code}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs sm:text-sm font-medium text-foreground">{calculatedResult.icd10.site}</p>
-                <p className="text-[10px] sm:text-xs text-muted-foreground">{calculatedResult.icd10.description}</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* TNM Summary Card */}
+      {/* ============================================================
+          SECTION 4: TNM DETAILS
+          ============================================================ */}
       <Card>
         <CardHeader className="pb-2 sm:pb-3">
           <CardTitle className="text-base sm:text-lg flex items-center gap-2">
             <Info className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
-            TNM Staging Details
+            TNM Details
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 sm:space-y-4">
@@ -407,7 +357,61 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
       </Card>
 
       {/* ============================================================
-          SECTION 4: CLINICAL CHECKLIST & GATE EXECUTION (DETAIL)
+          SECTION 5: PROGNOSTIC OUTLOOK & CODING
+          ============================================================ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        {calculatedResult.survival && (
+          <Card className="border border-success/30 bg-success/5">
+            <CardHeader className="pb-2 sm:pb-3">
+              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                <Heart className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
+                Prognostic Outlook
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-1">5-Year Pathologic Survival</p>
+                <p className={`text-2xl sm:text-3xl font-bold ${getSurvivalColor(survivalPercentage)}`}>
+                  {calculatedResult.survival.five_year_survival}
+                </p>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2 sm:h-2.5">
+                <div 
+                  className={`h-full rounded-full transition-all duration-500 ${getSurvivalBgColor(survivalPercentage)}`}
+                  style={{ width: `${survivalPercentage}%` }}
+                />
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">
+                Based on {calculatedResult.stage_group} pathologic staging
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {calculatedResult.icd10 && (
+          <Card className="border border-info/30 bg-info/5">
+            <CardHeader className="pb-2 sm:pb-3">
+              <CardTitle className="text-sm sm:text-base flex items-center gap-2">
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-info" />
+                Coding
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-1">ICD-10-CM Code</p>
+                <p className="text-2xl sm:text-3xl font-bold text-info">{calculatedResult.icd10.code}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs sm:text-sm font-medium text-foreground">{calculatedResult.icd10.site}</p>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">{calculatedResult.icd10.description}</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* ============================================================
+          SECTION 6: DETAILED FINDINGS (CHECKLIST)
           ============================================================ */}
       {calculatedResult.clinicalChecklist && (
         <ClinicalChecklist
@@ -419,8 +423,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
       )}
 
       {/* ============================================================
-          SECTION 5: CONDITIONAL ALERTS (NON-CONFLICT)
-          pT4, Ipsilateral, Nodal, Margin, Submission, etc.
+          SECTION 7: CONDITIONAL ALERTS
           ============================================================ */}
 
       {/* User Verified Banner */}
@@ -441,7 +444,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
             )}
             <div className="p-2 rounded bg-muted/50 border border-border">
               <p className="text-xs text-muted-foreground italic">
-                ⚠️ <span className="font-semibold">Note:</span> Manual override applied by user. AI safety protocols bypassed for this calculation.
+                ⚠️ <span className="font-semibold">Note:</span> Manual override applied by user. Safety protocols bypassed for this calculation.
               </p>
             </div>
             
@@ -456,7 +459,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
                   Undo Override & Restore Conservative Staging
                 </Button>
                 <p className="text-[10px] text-muted-foreground mt-2 text-center">
-                  This will restore AI safety protocols and revert to conservative size-based staging.
+                  This will restore safety protocols and revert to conservative size-based staging.
                 </p>
               </div>
             )}
@@ -495,7 +498,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
           </AlertTitle>
           <AlertDescription className="mt-2 space-y-2">
             <p className="text-sm text-foreground">
-              A separate tumor nodule in a different lobe of the SAME lung (ipsilateral) was detected. Per AJCC 8th Edition, this automatically assigns pT4 staging.
+              A separate tumor nodule in a different lobe of the same lung (ipsilateral) was detected. Per AJCC 8th Edition, this automatically assigns pT4 staging.
             </p>
             <div className="p-2 rounded bg-destructive/10 border border-destructive/20">
               <div className="flex flex-wrap gap-3 text-xs">
@@ -512,7 +515,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              <strong>Rule:</strong> Different lobe + Same lung = pT4 (not pT1c or pM1a)
+              <strong>Rule:</strong> Different lobe + Same lung = pT4
             </p>
           </AlertDescription>
         </Alert>
@@ -718,8 +721,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
       </Card>
 
       {/* ============================================================
-          SECTION 6: CONFLICT DETECTED (VERY BOTTOM)
-          Moved to bottom per pathologist-centric layout spec
+          SECTION 8: CONFLICT DETECTED (VERY BOTTOM)
           ============================================================ */}
       {hasConflict && parsedReport.conflicts.length > 0 && (
         <Alert className="border-2 border-amber-500/50 bg-amber-500/10">
