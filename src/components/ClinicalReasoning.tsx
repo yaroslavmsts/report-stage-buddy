@@ -37,21 +37,33 @@ function generateClinicalReasoning(
         );
       }
     } else if (basis.includes('Anatomical')) {
-      // Extract the anatomical site without any gate/arrow notation
+      // Extract the anatomical structure(s) from pT4Override or gate detail
+      const pT4Structures = parsedReport.pT4Override?.structures || [];
       const triggeredExec = checklist.gateExecutions?.find(g => g.stoppedHere);
       const rawDetail = triggeredExec?.detail || '';
-      const site = rawDetail
-        .replace(/→.*/, '')
-        .replace(/Gate\s*\d+/gi, '')
-        .replace(/GATE\s*\d+/gi, '')
-        .trim();
-      if (site) {
+      
+      // Prefer pT4Override structures (clean names), fall back to gate detail
+      let structureName = '';
+      if (pT4Structures.length > 0) {
+        structureName = pT4Structures.join(' and ').toLowerCase();
+      } else {
+        // Extract from gate detail, removing arrow notation
+        structureName = rawDetail
+          .replace(/→.*/, '')
+          .replace(/Invasion\s*of:\s*/i, '')
+          .replace(/Gate\s*\d+/gi, '')
+          .replace(/GATE\s*\d+/gi, '')
+          .trim()
+          .toLowerCase();
+      }
+      
+      if (structureName) {
         sentences.push(
-          `Direct invasion of ${site.toLowerCase()} was identified, which requires ${tCat} classification regardless of tumor size.`
+          `${tCat} assigned due to ${structureName} involvement, overriding mass size. Per AJCC 8th Edition, anatomical invasion takes absolute priority over tumor dimensions.`
         );
       } else {
         sentences.push(
-          `An anatomical finding was identified that requires ${tCat} classification, overriding standard size-based staging.`
+          `${tCat} assigned due to direct anatomical invasion, overriding standard size-based staging per AJCC 8th Edition.`
         );
       }
     } else if (basis.includes('Laterality')) {

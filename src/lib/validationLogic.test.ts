@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectInvasionConflicts, detectAmbiguityPhrases, detectPT4Structures, detectNodalStationAlerts, detectMarginStatus, detectMultiplePrimaryTumors, ConflictInfo, NodalStationAlert, MarginAlert } from './validationLogic';
+import { detectInvasionConflicts, detectAmbiguityPhrases, detectPT4Structures, detectNodalStationAlerts, detectMarginStatus, detectMultiplePrimaryTumors, parsePathologyReport, runValidation, ConflictInfo, NodalStationAlert, MarginAlert } from './validationLogic';
 
 describe('detectInvasionConflicts', () => {
   describe('should NOT detect conflict (standard negation patterns - CONFIRMED NEGATIVE)', () => {
@@ -650,6 +650,146 @@ describe('detectMultiplePrimaryTumors', () => {
     it('standard pathology report without multiple primaries', () => {
       const result = detectMultiplePrimaryTumors('Invasive adenocarcinoma, acinar predominant. Tumor size 2.0 cm.');
       expect(result).toBe(false);
+    });
+  });
+});
+
+// ============================================
+// INTEGRATION TESTS: Full Pipeline (parseReport → runValidation)
+// Verifies the Deterministic Gated Engine end-to-end
+// ============================================
+describe('Integration: Deterministic Gated Engine', () => {
+
+  describe('Gate 1: Anatomical Override (pT4)', () => {
+    it('phrenic nerve invasion → pT4, overriding 3.5 cm size', () => {
+      const report = 'Squamous cell carcinoma measuring 3.5 cm. The tumor invades the phrenic nerve. Margins negative.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+      expect(result.basis).toBe('anatomical_override');
+    });
+
+    it('phrenic nerve involvement → pT4', () => {
+      const report = 'Adenocarcinoma, 2.0 cm. Phrenic nerve involvement is identified.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('mediastinal invasion → pT4, overriding 1.5 cm size', () => {
+      const report = 'Squamous cell carcinoma, 1.5 cm. Tumor invades the mediastinum. No lymph node metastasis.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+      expect(result.basis).toBe('anatomical_override');
+    });
+
+    it('mediastinal fat invasion → pT4', () => {
+      const report = 'Adenocarcinoma measuring 2.5 cm. Mediastinal fat invasion is present.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('mediastinal soft tissue invasion → pT4', () => {
+      const report = 'Squamous cell carcinoma 4.0 cm. Tumor extends into the mediastinal soft tissue.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('diaphragm invasion → pT4', () => {
+      const report = 'Adenocarcinoma, 3.0 cm. Diaphragmatic invasion is identified.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('great vessels invasion → pT4', () => {
+      const report = 'Squamous cell carcinoma, 5.0 cm. The tumor invades the great vessels.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('pT4 override is NOT suppressed by unrelated conflict', () => {
+      const report = 'Squamous cell carcinoma, 3.0 cm. Tumor invades the phrenic nerve. Visceral pleural invasion cannot be ruled out.';
+      const parsed = parsePathologyReport(report);
+      // Report has a conflict about pleural invasion, but phrenic nerve is non-negotiable
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+      expect(result.basis).toBe('anatomical_override');
+    });
+
+    it('size is FORBIDDEN when anatomical override present', () => {
+      // 0.8 cm would normally be pT1a, but phrenic nerve forces pT4
+      const report = 'Adenocarcinoma, 0.8 cm. The tumor invades the phrenic nerve.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+      expect(result.size_basis_cm).toBeUndefined();
+    });
+  });
+
+  describe('Gate 1: Anatomical Override (pT3)', () => {
+    it('intercostal muscle invasion → pT3', () => {
+      const report = 'Squamous cell carcinoma, 1.2 cm. Tumor invades the intercostal muscle.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT3');
+    });
+
+    it('chest wall invasion → pT3', () => {
+      const report = 'Adenocarcinoma, 2.0 cm. Chest wall invasion is present.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT3');
+    });
+  });
+
+  describe('Gate 2: Component Size (Note A)', () => {
+    it('adenocarcinoma with 0.4 cm invasive focus → pT1mi, ignoring 4.2 cm total', () => {
+      const report = 'Invasive adenocarcinoma with lepidic component. Total tumor size 4.2 cm. Invasive component is 0.4 cm.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT1mi');
+      expect(result.size_basis_cm).toBe(0.4);
+    });
+
+    it('adenocarcinoma with 1.2 cm invasive focus → pT1b', () => {
+      const report = 'Invasive adenocarcinoma with lepidic component. Total size 3.0 cm. Invasive size: 1.2 cm.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT1b');
+      expect(result.size_basis_cm).toBe(1.2);
+    });
+
+    it('Gate 1 overrides Gate 2: phrenic nerve beats invasive component', () => {
+      const report = 'Invasive adenocarcinoma with lepidic component. Total 4.2 cm. Invasive component 0.4 cm. Tumor invades the phrenic nerve.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+      expect(result.basis).toBe('anatomical_override');
+    });
+  });
+
+  describe('Coding Persistence', () => {
+    it('squamous cell carcinoma shows M8070/3 morphology', () => {
+      const report = 'Squamous cell carcinoma, 2.5 cm. No pleural invasion.';
+      const parsed = parsePathologyReport(report);
+      expect(parsed.rawText.toLowerCase()).toContain('squamous cell carcinoma');
+    });
+  });
+
+  describe('Clinical Reasoning: Pathologist Voice', () => {
+    it('anatomical override reasoning mentions the structure by name', () => {
+      const report = 'Squamous cell carcinoma, 3.0 cm. Tumor invades the phrenic nerve.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      // Verify the checklist references anatomical override
+      expect(result.clinicalChecklist?.stagingBasis).toContain('Anatomical');
+      expect(result.clinicalChecklist?.clinicalVerdict).toContain('pT4');
+      expect(result.clinicalChecklist?.clinicalVerdict).toContain('anatomical');
     });
   });
 });
