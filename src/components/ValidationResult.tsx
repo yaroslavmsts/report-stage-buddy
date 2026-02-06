@@ -1,4 +1,4 @@
-import { useState } from 'react';
+
 import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, DollarSign, Heart, FileText, AlertTriangle, HelpCircle, MapPin, Scissors, UserCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert, SubmissionAlert, IpsilateralLobeInfo, ClinicalChecklistData, GateExecution } from '@/lib/validationLogic';
 import { ClinicalChecklist, ChecklistItem } from '@/components/ClinicalChecklist';
+import { PathologySummary } from '@/components/PathologySummary';
+import { ClinicalReasoning } from '@/components/ClinicalReasoning';
 
 // Helper function to build checklist items from clinical checklist data
 function buildChecklistItems(checklist: ClinicalChecklistData): ChecklistItem[] {
@@ -107,7 +109,6 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
   const isInsufficientData = comparison.isAutoCalculated && !comparison.isMatch;
 
   const getStatusConfig = () => {
-    // USER VERIFIED (override applied)
     if (isOverridden) {
       return {
         icon: UserCheck,
@@ -118,7 +119,6 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
         pulseClass: '',
       };
     }
-    // CONFLICT DETECTED takes highest priority
     if (hasConflict) {
       return {
         icon: AlertTriangle,
@@ -172,11 +172,9 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
   const config = getStatusConfig();
   const StatusIcon = config.icon;
 
-  // Determine display labels based on auto-calculate mode
   const calculatedStageLabel = isAutoCalculated ? 'Suggested Stage' : 'Calculated Stage';
   const hasCalculatedStage = calculatedResult.t_category !== null;
 
-  // Get survival percentage as number for progress bar
   const getSurvivalPercentage = (): number => {
     if (!calculatedResult.survival) return 0;
     const match = calculatedResult.survival.five_year_survival.match(/(\d+)/);
@@ -185,7 +183,6 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
 
   const survivalPercentage = getSurvivalPercentage();
 
-  // Get survival color based on percentage
   const getSurvivalColor = (percentage: number): string => {
     if (percentage >= 70) return 'text-success';
     if (percentage >= 40) return 'text-warning';
@@ -200,6 +197,32 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
 
   return (
     <div className="space-y-3 sm:space-y-4">
+
+      {/* ============================================================
+          SECTION 1: PATHOLOGY VALIDATION SUMMARY (TOP)
+          Shows Histology, Primary Metric, and Confirmed Negatives
+          ============================================================ */}
+      <PathologySummary
+        parsedReport={parsedReport}
+        calculatedResult={calculatedResult}
+        checklist={calculatedResult.clinicalChecklist}
+      />
+
+      {/* ============================================================
+          SECTION 2: CLINICAL REASONING (MIDDLE)
+          2-3 clinical-grade sentences
+          ============================================================ */}
+      <ClinicalReasoning
+        parsedReport={parsedReport}
+        calculatedResult={calculatedResult}
+        checklist={calculatedResult.clinicalChecklist}
+      />
+
+      {/* ============================================================
+          SECTION 3: STAGING RESULT (BOTTOM)
+          Main status card + AJCC Prognostic Group + Survival/Billing
+          ============================================================ */}
+
       {/* Main Status Card */}
       <Card className={`border-2 ${config.bgClass} ${config.pulseClass}`}>
         <CardContent className="pt-4 sm:pt-6">
@@ -223,285 +246,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
         </CardContent>
       </Card>
 
-      {/* Conflict Detection Alert - with Override option */}
-      {hasConflict && parsedReport.conflicts.length > 0 && (
-        <Alert className="border-2 border-amber-500/50 bg-amber-500/10">
-          <AlertTriangle className="h-5 w-5 text-amber-500" />
-          <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-2">
-            Linguistic Conflict Detected
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-amber-500/70 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent side="right" className="max-w-xs p-3">
-                  <div className="space-y-2 text-xs">
-                    <p className="font-semibold text-foreground">Conflict Detection vs Negation Handling</p>
-                    <div className="space-y-1.5">
-                      <p><span className="font-medium text-success">✓ Negation Handling:</span> Recognizes clear negative statements like "No invasion" or "Pleura intact" and correctly excludes invasion from staging.</p>
-                      <p><span className="font-medium text-amber-500">⚠ Conflict Detection:</span> Flags ambiguous sentences where invasion AND negation keywords appear within 10 words, suggesting contradictory or equivocal language that requires manual review.</p>
-                    </div>
-                    <p className="text-muted-foreground italic">Example conflict: "No definitive invasion but tumor cells present at pleural surface"</p>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </AlertTitle>
-          <AlertDescription className="mt-2 space-y-3">
-            <p className="text-sm text-foreground">
-              The report contains contradictory or ambiguous terms regarding invasion status. Please verify manually.
-            </p>
-            
-            {/* Highlighted conflicting sentences */}
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Conflicting Sentences Found:
-              </p>
-              {parsedReport.conflicts.map((conflict, index) => (
-                <div 
-                  key={index}
-                  className="p-2 sm:p-3 rounded-md bg-amber-500/20 border border-amber-500/30"
-                >
-                  <p className="text-xs sm:text-sm font-mono text-foreground leading-relaxed">
-                    "{conflict.sentence}"
-                  </p>
-                  <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400 mt-1">
-                    {conflict.conflictType === 'ambiguity' ? (
-                      <>⚠️ Ambiguous phrase: <span className="font-semibold">"{conflict.negationKeyword}"</span> suggests uncertainty about {conflict.invasionKeyword}</>
-                    ) : (
-                      <>Found: <span className="font-semibold">"{conflict.invasionKeyword}"</span> + <span className="font-semibold">"{conflict.negationKeyword}"</span> within 10-word proximity</>
-                    )}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            {/* Conservative staging disclaimer */}
-            <div className="p-2 rounded bg-muted/50 border border-border">
-              <p className="text-xs text-muted-foreground">
-                <span className="font-semibold text-amber-600 dark:text-amber-400">⚠️ Conservative Staging Applied:</span> Due to the detected conflict, invasion-based staging overrides have been disabled. The calculated stage is based on tumor size only. Invasion status could not be safely determined.
-              </p>
-            </div>
-
-            {/* Manual Override Button */}
-            {onOverride && (
-              <div className="pt-2 border-t border-amber-500/30">
-                <Button 
-                  onClick={onOverride}
-                  variant="outline"
-                  className="w-full border-info text-info hover:bg-info/10 hover:text-info"
-                >
-                  <UserCheck className="mr-2 h-4 w-4" />
-                  Confirm Findings & Override
-                </Button>
-                <p className="text-[10px] text-muted-foreground mt-2 text-center">
-                  Clicking this will accept the findings as reviewed and re-enable full staging logic including invasion overrides.
-                </p>
-              </div>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* User Verified Banner - Show when override is applied */}
-      {isOverridden && parsedReport.conflicts.length > 0 && (
-        <Alert className="border-2 border-info/50 bg-info/10">
-          <UserCheck className="h-5 w-5 text-info" />
-          <AlertTitle className="text-info font-semibold">
-            ✓ User Verified - Manual Override Applied
-          </AlertTitle>
-          <AlertDescription className="mt-2 space-y-3">
-            <p className="text-sm text-foreground">
-              The conflict warnings have been reviewed and findings confirmed. Full staging logic has been restored, including invasion-based overrides.
-            </p>
-            {overrideTimestamp && (
-              <p className="text-xs text-muted-foreground">
-                Override applied at: {overrideTimestamp}
-              </p>
-            )}
-            <div className="p-2 rounded bg-muted/50 border border-border">
-              <p className="text-xs text-muted-foreground italic">
-                ⚠️ <span className="font-semibold">Note:</span> Manual override applied by user. AI safety protocols bypassed for this calculation.
-              </p>
-            </div>
-            
-            {/* Undo Override Button */}
-            {onUndoOverride && (
-              <div className="pt-2 border-t border-info/30">
-                <Button 
-                  onClick={onUndoOverride}
-                  variant="outline"
-                  className="w-full border-amber-500 text-amber-600 hover:bg-amber-500/10 hover:text-amber-600"
-                >
-                  <AlertTriangle className="mr-2 h-4 w-4" />
-                  Undo Override & Restore Conservative Staging
-                </Button>
-                <p className="text-[10px] text-muted-foreground mt-2 text-center">
-                  This will restore AI safety protocols and revert to conservative size-based staging.
-                </p>
-              </div>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* pT4 Override Alert */}
-      {parsedReport.pT4Override?.detected && (
-        <Alert className="border-2 border-destructive/50 bg-destructive/10">
-          <AlertTriangle className="h-5 w-5 text-destructive" />
-          <AlertTitle className="text-destructive font-semibold">
-            ⚠️ Anatomical Override: pT4 Structures Detected
-          </AlertTitle>
-          <AlertDescription className="mt-2">
-            <p className="text-sm text-foreground mb-2">
-              Invasion of the following critical structures was detected, which automatically assigns pT4 staging regardless of tumor size:
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {parsedReport.pT4Override.structures.map((structure, index) => (
-                <span key={index} className="px-2 py-1 bg-destructive/20 text-destructive rounded text-xs font-medium">
-                  {structure}
-                </span>
-              ))}
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Ipsilateral Lobe Nodule Alert - pT4 Override */}
-      {parsedReport.ipsilateralLobeInfo?.isDifferentLobesSameLung && (
-        <Alert className="border-2 border-destructive/50 bg-destructive/10">
-          <AlertTriangle className="h-5 w-5 text-destructive" />
-          <AlertTitle className="text-destructive font-semibold">
-            ⚠️ Ipsilateral Lobe Override: pT4 Required
-          </AlertTitle>
-          <AlertDescription className="mt-2 space-y-2">
-            <p className="text-sm text-foreground">
-              A separate tumor nodule in a different lobe of the SAME lung (ipsilateral) was detected. Per AJCC 8th Edition, this automatically assigns pT4 staging.
-            </p>
-            <div className="p-2 rounded bg-destructive/10 border border-destructive/20">
-              <div className="flex flex-wrap gap-3 text-xs">
-                <div>
-                  <span className="font-medium text-muted-foreground">Primary Tumor:</span>{' '}
-                  <span className="font-semibold text-foreground">{parsedReport.ipsilateralLobeInfo.primaryLobe} ({parsedReport.ipsilateralLobeInfo.primaryLung} Lung)</span>
-                </div>
-                {parsedReport.ipsilateralLobeInfo.noduleLobe && (
-                  <div>
-                    <span className="font-medium text-muted-foreground">Separate Nodule:</span>{' '}
-                    <span className="font-semibold text-foreground">{parsedReport.ipsilateralLobeInfo.noduleLobe} ({parsedReport.ipsilateralLobeInfo.noduleLung} Lung)</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              <strong>Rule:</strong> Different lobe + Same lung = pT4 (not pT1c or pM1a)
-            </p>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Nodal Station Alerts */}
-      {parsedReport.nodalStationAlerts?.length > 0 && (
-        <Alert className="border-2 border-info/50 bg-info/10">
-          <MapPin className="h-5 w-5 text-info" />
-          <AlertTitle className="text-info font-semibold">
-            📍 Nodal Station Alert
-          </AlertTitle>
-          <AlertDescription className="mt-2 space-y-2">
-            {parsedReport.nodalStationAlerts.map((alert, index) => (
-              <div key={index} className="p-2 rounded bg-info/10 border border-info/20">
-                <p className="text-xs sm:text-sm text-foreground">{alert.message}</p>
-              </div>
-            ))}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Margin Alert - HIGH PRIORITY */}
-      {parsedReport.marginAlerts?.length > 0 && (
-        <Alert className={`border-2 ${parsedReport.marginAlerts.some(a => a.status === 'involved') ? 'border-destructive/70 bg-destructive/15' : 'border-amber-500/50 bg-amber-500/10'}`}>
-          <Scissors className={`h-5 w-5 ${parsedReport.marginAlerts.some(a => a.status === 'involved') ? 'text-destructive' : 'text-amber-500'}`} />
-          <AlertTitle className={`font-semibold ${parsedReport.marginAlerts.some(a => a.status === 'involved') ? 'text-destructive' : 'text-amber-600 dark:text-amber-400'}`}>
-            🚨 Margin Status Alert
-          </AlertTitle>
-          <AlertDescription className="mt-2 space-y-2">
-            {parsedReport.marginAlerts.map((alert, index) => (
-              <div key={index} className={`p-2 rounded border ${alert.status === 'involved' ? 'bg-destructive/10 border-destructive/30' : 'bg-amber-500/10 border-amber-500/20'}`}>
-                <p className="text-xs sm:text-sm text-foreground font-medium mb-1">
-                  Found: "{alert.margin}"
-                </p>
-                <p className="text-xs text-foreground">{alert.message}</p>
-              </div>
-            ))}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Invasive Size Missing Alert for Nonmucinous Adenocarcinomas */}
-      {parsedReport.invasiveSizeMissing && (
-        <Alert className="border-2 border-amber-500/50 bg-amber-500/10">
-          <AlertTriangle className="h-5 w-5 text-amber-500" />
-          <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold">
-            ⚠️ Invasive Size Required
-          </AlertTitle>
-          <AlertDescription className="mt-2">
-            <p className="text-sm text-foreground">
-              This report describes a <strong>nonmucinous adenocarcinoma with lepidic component</strong>. 
-              Per CAP Note A, the <strong>invasive component size</strong> (not total tumor size) must be used for T-staging.
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Please ensure the report includes either:
-            </p>
-            <ul className="text-xs text-muted-foreground mt-1 list-disc list-inside space-y-1">
-              <li>Invasive component size (e.g., "invasive component: 0.8 cm")</li>
-              <li>Percentage of invasion (e.g., "60% invasive pattern")</li>
-            </ul>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Multiple Primary Tumors Badge */}
-      {parsedReport.multiplePrimaryTumors && (
-        <Alert className="border-2 border-info/50 bg-info/10">
-          <Info className="h-5 w-5 text-info" />
-          <AlertTitle className="text-info font-semibold">
-            Multiple Primary Tumors Detected - (m) Suffix Applied
-          </AlertTitle>
-          <AlertDescription className="mt-2">
-            <p className="text-sm text-foreground">
-              The report indicates multiple primary tumors. Per AJCC standards, the "(m)" suffix has been appended to the T-category (e.g., pT1b(m)).
-            </p>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Submission Alert - AIS (pTis) and MIA (pT1mi) require entire lesion submission */}
-      {parsedReport.submissionAlerts?.length > 0 && (
-        <Alert className="border-2 border-amber-500/50 bg-amber-500/10">
-          <FileText className="h-5 w-5 text-amber-500" />
-          <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold">
-            ⚠️ Submission Requirement Alert
-          </AlertTitle>
-          <AlertDescription className="mt-2 space-y-2">
-            {parsedReport.submissionAlerts.map((alert, index) => (
-              <div key={index} className="p-2 rounded bg-amber-500/10 border border-amber-500/20">
-                <p className="text-xs sm:text-sm text-foreground">{alert.message}</p>
-              </div>
-            ))}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Clinical Validation Checklist - NEW UI with Logic Execution Table */}
-      {calculatedResult.clinicalChecklist && (
-        <ClinicalChecklist
-          items={buildChecklistItems(calculatedResult.clinicalChecklist)}
-          clinicalVerdict={calculatedResult.clinicalChecklist.clinicalVerdict}
-          stagingBasis={calculatedResult.clinicalChecklist.stagingBasis}
-          gateExecutions={calculatedResult.clinicalChecklist.gateExecutions}
-        />
-      )}
-
-      {/* AJCC Prognostic Group Card - Main staging focus */}
+      {/* AJCC Prognostic Group Card */}
       {calculatedResult.stage_group && (
         <Card className="border-2 border-primary/30 bg-primary/5">
           <CardContent className="pt-4 sm:pt-6">
@@ -516,9 +261,8 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
         </Card>
       )}
 
-      {/* Smart Value-Adds: Billing & Prognostic Sections */}
+      {/* Smart Value-Adds: Survival & Billing */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-        {/* Prognostic Outlook Card */}
         {calculatedResult.survival && (
           <Card className="border border-success/30 bg-success/5">
             <CardHeader className="pb-2 sm:pb-3">
@@ -534,7 +278,6 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
                   {calculatedResult.survival.five_year_survival}
                 </p>
               </div>
-              {/* Progress Bar */}
               <div className="w-full bg-muted rounded-full h-2 sm:h-2.5">
                 <div 
                   className={`h-full rounded-full transition-all duration-500 ${getSurvivalBgColor(survivalPercentage)}`}
@@ -548,7 +291,6 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
           </Card>
         )}
 
-        {/* Billing & Coding Card */}
         {calculatedResult.icd10 && (
           <Card className="border border-info/30 bg-info/5">
             <CardHeader className="pb-2 sm:pb-3">
@@ -622,15 +364,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
             </div>
           </div>
 
-          {/* Reasoning - Always show */}
-          <div className="border-t pt-3 sm:pt-4">
-            <p className="text-[10px] sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">Reasoning</p>
-            <div className="text-xs sm:text-sm text-foreground leading-relaxed whitespace-pre-line">
-              {comparison.details || calculatedResult.reason}
-            </div>
-          </div>
-
-          {/* Clinical Note - Show for lepidic mismatch cases */}
+          {/* Clinical Note */}
           {comparison.clinicalNote && (
             <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-info/10 border border-info/30 rounded-lg">
               <div className="flex items-start gap-2 sm:gap-3">
@@ -647,7 +381,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
             </div>
           )}
 
-          {/* Size & Basis - Compact layout */}
+          {/* Size & Basis */}
           <div className="grid grid-cols-2 gap-2 sm:gap-4">
             {calculatedResult.size_basis_cm !== undefined && calculatedResult.size_basis_cm !== null && (
               <div className="border-t pt-3 sm:pt-4">
@@ -671,6 +405,210 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
           </div>
         </CardContent>
       </Card>
+
+      {/* ============================================================
+          SECTION 4: CLINICAL CHECKLIST & GATE EXECUTION (DETAIL)
+          ============================================================ */}
+      {calculatedResult.clinicalChecklist && (
+        <ClinicalChecklist
+          items={buildChecklistItems(calculatedResult.clinicalChecklist)}
+          clinicalVerdict={calculatedResult.clinicalChecklist.clinicalVerdict}
+          stagingBasis={calculatedResult.clinicalChecklist.stagingBasis}
+          gateExecutions={calculatedResult.clinicalChecklist.gateExecutions}
+        />
+      )}
+
+      {/* ============================================================
+          SECTION 5: CONDITIONAL ALERTS (NON-CONFLICT)
+          pT4, Ipsilateral, Nodal, Margin, Submission, etc.
+          ============================================================ */}
+
+      {/* User Verified Banner */}
+      {isOverridden && parsedReport.conflicts.length > 0 && (
+        <Alert className="border-2 border-info/50 bg-info/10">
+          <UserCheck className="h-5 w-5 text-info" />
+          <AlertTitle className="text-info font-semibold">
+            ✓ User Verified - Manual Override Applied
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-3">
+            <p className="text-sm text-foreground">
+              The conflict warnings have been reviewed and findings confirmed. Full staging logic has been restored, including invasion-based overrides.
+            </p>
+            {overrideTimestamp && (
+              <p className="text-xs text-muted-foreground">
+                Override applied at: {overrideTimestamp}
+              </p>
+            )}
+            <div className="p-2 rounded bg-muted/50 border border-border">
+              <p className="text-xs text-muted-foreground italic">
+                ⚠️ <span className="font-semibold">Note:</span> Manual override applied by user. AI safety protocols bypassed for this calculation.
+              </p>
+            </div>
+            
+            {onUndoOverride && (
+              <div className="pt-2 border-t border-info/30">
+                <Button 
+                  onClick={onUndoOverride}
+                  variant="outline"
+                  className="w-full border-amber-500 text-amber-600 hover:bg-amber-500/10 hover:text-amber-600"
+                >
+                  <AlertTriangle className="mr-2 h-4 w-4" />
+                  Undo Override & Restore Conservative Staging
+                </Button>
+                <p className="text-[10px] text-muted-foreground mt-2 text-center">
+                  This will restore AI safety protocols and revert to conservative size-based staging.
+                </p>
+              </div>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* pT4 Override Alert */}
+      {parsedReport.pT4Override?.detected && (
+        <Alert className="border-2 border-destructive/50 bg-destructive/10">
+          <AlertTriangle className="h-5 w-5 text-destructive" />
+          <AlertTitle className="text-destructive font-semibold">
+            ⚠️ Anatomical Override: pT4 Structures Detected
+          </AlertTitle>
+          <AlertDescription className="mt-2">
+            <p className="text-sm text-foreground mb-2">
+              Invasion of the following critical structures was detected, which automatically assigns pT4 staging regardless of tumor size:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {parsedReport.pT4Override.structures.map((structure, index) => (
+                <span key={index} className="px-2 py-1 bg-destructive/20 text-destructive rounded text-xs font-medium">
+                  {structure}
+                </span>
+              ))}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Ipsilateral Lobe Nodule Alert */}
+      {parsedReport.ipsilateralLobeInfo?.isDifferentLobesSameLung && (
+        <Alert className="border-2 border-destructive/50 bg-destructive/10">
+          <AlertTriangle className="h-5 w-5 text-destructive" />
+          <AlertTitle className="text-destructive font-semibold">
+            ⚠️ Ipsilateral Lobe Override: pT4 Required
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-2">
+            <p className="text-sm text-foreground">
+              A separate tumor nodule in a different lobe of the SAME lung (ipsilateral) was detected. Per AJCC 8th Edition, this automatically assigns pT4 staging.
+            </p>
+            <div className="p-2 rounded bg-destructive/10 border border-destructive/20">
+              <div className="flex flex-wrap gap-3 text-xs">
+                <div>
+                  <span className="font-medium text-muted-foreground">Primary Tumor:</span>{' '}
+                  <span className="font-semibold text-foreground">{parsedReport.ipsilateralLobeInfo.primaryLobe} ({parsedReport.ipsilateralLobeInfo.primaryLung} Lung)</span>
+                </div>
+                {parsedReport.ipsilateralLobeInfo.noduleLobe && (
+                  <div>
+                    <span className="font-medium text-muted-foreground">Separate Nodule:</span>{' '}
+                    <span className="font-semibold text-foreground">{parsedReport.ipsilateralLobeInfo.noduleLobe} ({parsedReport.ipsilateralLobeInfo.noduleLung} Lung)</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              <strong>Rule:</strong> Different lobe + Same lung = pT4 (not pT1c or pM1a)
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Nodal Station Alerts */}
+      {parsedReport.nodalStationAlerts?.length > 0 && (
+        <Alert className="border-2 border-info/50 bg-info/10">
+          <MapPin className="h-5 w-5 text-info" />
+          <AlertTitle className="text-info font-semibold">
+            📍 Nodal Station Alert
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-2">
+            {parsedReport.nodalStationAlerts.map((alert, index) => (
+              <div key={index} className="p-2 rounded bg-info/10 border border-info/20">
+                <p className="text-xs sm:text-sm text-foreground">{alert.message}</p>
+              </div>
+            ))}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Margin Alert */}
+      {parsedReport.marginAlerts?.length > 0 && (
+        <Alert className={`border-2 ${parsedReport.marginAlerts.some(a => a.status === 'involved') ? 'border-destructive/70 bg-destructive/15' : 'border-amber-500/50 bg-amber-500/10'}`}>
+          <Scissors className={`h-5 w-5 ${parsedReport.marginAlerts.some(a => a.status === 'involved') ? 'text-destructive' : 'text-amber-500'}`} />
+          <AlertTitle className={`font-semibold ${parsedReport.marginAlerts.some(a => a.status === 'involved') ? 'text-destructive' : 'text-amber-600 dark:text-amber-400'}`}>
+            🚨 Margin Status Alert
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-2">
+            {parsedReport.marginAlerts.map((alert, index) => (
+              <div key={index} className={`p-2 rounded border ${alert.status === 'involved' ? 'bg-destructive/10 border-destructive/30' : 'bg-amber-500/10 border-amber-500/20'}`}>
+                <p className="text-xs sm:text-sm text-foreground font-medium mb-1">
+                  Found: "{alert.margin}"
+                </p>
+                <p className="text-xs text-foreground">{alert.message}</p>
+              </div>
+            ))}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Invasive Size Missing Alert */}
+      {parsedReport.invasiveSizeMissing && (
+        <Alert className="border-2 border-amber-500/50 bg-amber-500/10">
+          <AlertTriangle className="h-5 w-5 text-amber-500" />
+          <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold">
+            ⚠️ Invasive Size Required
+          </AlertTitle>
+          <AlertDescription className="mt-2">
+            <p className="text-sm text-foreground">
+              This report describes a <strong>nonmucinous adenocarcinoma with lepidic component</strong>. 
+              Per CAP Note A, the <strong>invasive component size</strong> (not total tumor size) must be used for T-staging.
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Please ensure the report includes either:
+            </p>
+            <ul className="text-xs text-muted-foreground mt-1 list-disc list-inside space-y-1">
+              <li>Invasive component size (e.g., "invasive component: 0.8 cm")</li>
+              <li>Percentage of invasion (e.g., "60% invasive pattern")</li>
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Multiple Primary Tumors Badge */}
+      {parsedReport.multiplePrimaryTumors && (
+        <Alert className="border-2 border-info/50 bg-info/10">
+          <Info className="h-5 w-5 text-info" />
+          <AlertTitle className="text-info font-semibold">
+            Multiple Primary Tumors Detected - (m) Suffix Applied
+          </AlertTitle>
+          <AlertDescription className="mt-2">
+            <p className="text-sm text-foreground">
+              The report indicates multiple primary tumors. Per AJCC standards, the "(m)" suffix has been appended to the T-category (e.g., pT1b(m)).
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Submission Alert */}
+      {parsedReport.submissionAlerts?.length > 0 && (
+        <Alert className="border-2 border-amber-500/50 bg-amber-500/10">
+          <FileText className="h-5 w-5 text-amber-500" />
+          <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold">
+            ⚠️ Submission Requirement Alert
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-2">
+            {parsedReport.submissionAlerts.map((alert, index) => (
+              <div key={index} className="p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                <p className="text-xs sm:text-sm text-foreground">{alert.message}</p>
+              </div>
+            ))}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Extracted Findings Card */}
       <Card>
@@ -778,6 +716,86 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
           </div>
         </CardContent>
       </Card>
+
+      {/* ============================================================
+          SECTION 6: CONFLICT DETECTED (VERY BOTTOM)
+          Moved to bottom per pathologist-centric layout spec
+          ============================================================ */}
+      {hasConflict && parsedReport.conflicts.length > 0 && (
+        <Alert className="border-2 border-amber-500/50 bg-amber-500/10">
+          <AlertTriangle className="h-5 w-5 text-amber-500" />
+          <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-2">
+            Linguistic Conflict Detected
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-amber-500/70 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs p-3">
+                  <div className="space-y-2 text-xs">
+                    <p className="font-semibold text-foreground">Conflict Detection vs Negation Handling</p>
+                    <div className="space-y-1.5">
+                      <p><span className="font-medium text-success">✓ Negation Handling:</span> Recognizes clear negative statements like "No invasion" or "Pleura intact" and correctly excludes invasion from staging.</p>
+                      <p><span className="font-medium text-amber-500">⚠ Conflict Detection:</span> Flags ambiguous sentences where invasion AND negation keywords appear within 10 words, suggesting contradictory or equivocal language that requires manual review.</p>
+                    </div>
+                    <p className="text-muted-foreground italic">Example conflict: "No definitive invasion but tumor cells present at pleural surface"</p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </AlertTitle>
+          <AlertDescription className="mt-2 space-y-3">
+            <p className="text-sm text-foreground">
+              The report contains contradictory or ambiguous terms regarding invasion status. Please verify manually.
+            </p>
+            
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Conflicting Sentences Found:
+              </p>
+              {parsedReport.conflicts.map((conflict, index) => (
+                <div 
+                  key={index}
+                  className="p-2 sm:p-3 rounded-md bg-amber-500/20 border border-amber-500/30"
+                >
+                  <p className="text-xs sm:text-sm font-mono text-foreground leading-relaxed">
+                    "{conflict.sentence}"
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    {conflict.conflictType === 'ambiguity' ? (
+                      <>⚠️ Ambiguous phrase: <span className="font-semibold">"{conflict.negationKeyword}"</span> suggests uncertainty about {conflict.invasionKeyword}</>
+                    ) : (
+                      <>Found: <span className="font-semibold">"{conflict.invasionKeyword}"</span> + <span className="font-semibold">"{conflict.negationKeyword}"</span> within 10-word proximity</>
+                    )}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-2 rounded bg-muted/50 border border-border">
+              <p className="text-xs text-muted-foreground">
+                <span className="font-semibold text-amber-600 dark:text-amber-400">⚠️ Conservative Staging Applied:</span> Due to the detected conflict, invasion-based staging overrides have been disabled. The calculated stage is based on tumor size only. Invasion status could not be safely determined.
+              </p>
+            </div>
+
+            {onOverride && (
+              <div className="pt-2 border-t border-amber-500/30">
+                <Button 
+                  onClick={onOverride}
+                  variant="outline"
+                  className="w-full border-info text-info hover:bg-info/10 hover:text-info"
+                >
+                  <UserCheck className="mr-2 h-4 w-4" />
+                  Confirm Findings & Override
+                </Button>
+                <p className="text-[10px] text-muted-foreground mt-2 text-center">
+                  Clicking this will accept the findings as reviewed and re-enable full staging logic including invasion overrides.
+                </p>
+              </div>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Source Attribution Footer */}
       <div className="text-center pt-2 pb-1">
