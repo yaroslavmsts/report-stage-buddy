@@ -390,9 +390,9 @@ const Index = () => {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     const parsedReport = parsePathologyReport(reportText);
-    // Pass hasConflict to runValidation for conservative staging when conflicts detected
-    const calculatedResult = runValidation(parsedReport.inputs, parsedReport.rawText, parsedReport.hasConflict);
-    const comparison = compareStages(parsedReport.reportedStage, calculatedResult, parsedReport.inputs, parsedReport.rawText);
+    // Single-pass: parsedReport contains all pre-detected data, no re-detection needed
+    const calculatedResult = runValidation(parsedReport);
+    const comparison = compareStages(parsedReport, calculatedResult);
 
     setValidationResult({
       comparison,
@@ -410,17 +410,14 @@ const Index = () => {
     
     // Re-run validation WITHOUT conflict restrictions (hasConflict = false)
     const calculatedResult = runValidation(
-      validationResult.parsedReport.inputs, 
-      validationResult.parsedReport.rawText, 
+      validationResult.parsedReport, 
       false // Override: bypass conflict restrictions
     );
     
     // Update comparison with override note in details
     const comparison = compareStages(
-      validationResult.parsedReport.reportedStage, 
-      calculatedResult, 
-      validationResult.parsedReport.inputs,
-      validationResult.parsedReport.rawText
+      validationResult.parsedReport, 
+      calculatedResult
     );
     
     // Append override note to the reasoning
@@ -444,17 +441,14 @@ const Index = () => {
     
     // Re-run validation WITH conflict restrictions (hasConflict = true)
     const calculatedResult = runValidation(
-      validationResult.parsedReport.inputs, 
-      validationResult.parsedReport.rawText, 
+      validationResult.parsedReport, 
       true // Restore: re-enable conflict restrictions
     );
     
     // Update comparison to reflect conservative staging
     const comparison = compareStages(
-      validationResult.parsedReport.reportedStage, 
-      calculatedResult, 
-      validationResult.parsedReport.inputs,
-      validationResult.parsedReport.rawText
+      validationResult.parsedReport, 
+      calculatedResult
     );
     
     setValidationResult({
