@@ -457,6 +457,9 @@ export function detectPT4Structures(
         /mediastinal\s*(fat|soft\s*tissue)\s*(is\s*)?(invaded|involved|infiltrated)/i,
         /tumor\s*(extends?|invades?|involves?)\s*(into\s*)?(the\s*)?mediastin(um|al\s*(fat|soft\s*tissue))/i,
         /direct\s*(invasion|extension)\s*(of|into|to)\s*(the\s*)?mediastinal\s*(fat|soft\s*tissue)/i,
+        // BRIDGE PATTERNS: Capture "invasion into X and mediastinum/mediastinal fat"
+        /invasion\b[^.]{0,80}\bmediastin(um|al)/i,
+        /(?:underlying|adjacent)\s+mediastinal/i,
       ],
       display: 'Mediastinum'
     },
@@ -466,6 +469,9 @@ export function detectPT4Structures(
         /cardiac\s*invasion/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?heart/i,
         /involves?\s*(the\s*)?heart/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\bheart/i,
+        /invasion\b[^.]{0,80}\bcardiac/i,
       ],
       display: 'Heart'
     },
@@ -476,6 +482,9 @@ export function detectPT4Structures(
         /invasion\s*(of|into)\s*(the\s*)?great\s*vessels?/i,
         /invad(es?|ing|ed)\s*(the\s*)?(aorta|pulmonary\s*artery|vena\s*cava)/i,
         /aortic\s*invasion/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\bgreat\s*vessels?/i,
+        /invasion\b[^.]{0,80}\b(aorta|pulmonary\s*artery|vena\s*cava)/i,
       ],
       display: 'Great Vessels'
     },
@@ -484,6 +493,8 @@ export function detectPT4Structures(
         /invad(es?|ing|ed)\s*(the\s*)?trachea/i,
         /tracheal\s*invasion/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?trachea/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\btrachea/i,
       ],
       display: 'Trachea'
     },
@@ -492,6 +503,8 @@ export function detectPT4Structures(
         /invad(es?|ing|ed)\s*(the\s*)?recurrent\s*laryngeal\s*nerve/i,
         /recurrent\s*laryngeal\s*nerve\s*invasion/i,
         /recurrent\s*laryngeal\s*nerve\s*involvement/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\brecurrent\s*laryngeal/i,
       ],
       display: 'Recurrent Laryngeal Nerve'
     },
@@ -500,6 +513,8 @@ export function detectPT4Structures(
         /invad(es?|ing|ed)\s*(the\s*)?esophagus/i,
         /esophageal\s*invasion/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?esophagus/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\besophag(us|eal)/i,
       ],
       display: 'Esophagus'
     },
@@ -509,6 +524,8 @@ export function detectPT4Structures(
         /vertebral\s*(body\s*)?invasion/i,
         /spine\s*invasion/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?vertebra/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\bvertebra/i,
       ],
       display: 'Vertebral Body'
     },
@@ -520,6 +537,8 @@ export function detectPT4Structures(
         /tumor\s*(at|involves?|invad(es?|ing))\s*(the\s*)?carina/i,
         /less\s*than\s*2\s*cm\s*(from\s*)?(the\s*)?carina/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?carina/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\bcarina/i,
       ],
       display: 'Carina'
     },
@@ -533,6 +552,9 @@ export function detectPT4Structures(
         /involves?\s*(the\s*)?diaphragm/i,
         /infiltrat(es?|ing|ed)\s*(the\s*)?diaphragm/i,
         /tumor\s*(extends?|invades?|involves?)\s*(into\s*)?(the\s*)?diaphragm/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\bdiaphragm/i,
+        /(?:underlying|adjacent)\s+diaphragm/i,
       ],
       display: 'Diaphragm'
     },
@@ -547,6 +569,8 @@ export function detectPT4Structures(
         /phrenic\s*nerve\s*(is\s*)?(invaded|involved|infiltrated|encased|destroyed)/i,
         /infiltrat(es?|ing|ed)\s*(the\s*)?phrenic\s*nerve/i,
         /tumor\s*(extends?|invades?|involves?)\s*(into\s*)?(the\s*)?phrenic\s*nerve/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\bphrenic\s*nerve/i,
       ],
       display: 'Phrenic Nerve'
     },
@@ -1414,6 +1438,9 @@ export function parsePathologyReport(reportText: string): ParsedReport {
         /chest\s*wall\s*invasion/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?chest\s*wall/i,
         /extends?\s*(into|to)\s*(the\s*)?chest\s*wall/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\bchest\s*wall/i,
+        /(?:underlying|adjacent)\s+chest\s*wall/i,
       ],
       keywords: ['chest wall invasion', 'chest wall']
     },
@@ -1422,6 +1449,8 @@ export function parsePathologyReport(reportText: string): ParsedReport {
         /invad(es?|ing|ed)\s*(the\s*)?phrenic\s*nerve/i,
         /phrenic\s*nerve\s*invasion/i,
         /phrenic\s*nerve\s*involvement/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\bphrenic\s*nerve/i,
       ],
       keywords: ['phrenic nerve invasion', 'phrenic nerve']
     },
@@ -1431,6 +1460,8 @@ export function parsePathologyReport(reportText: string): ParsedReport {
         /pericardial\s*invasion/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?pericardium/i,
         /extends?\s*(into|to)\s*(the\s*)?pericardium/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\bpericardi(um|al)/i,
       ],
       keywords: ['pericardial invasion', 'pericardium']
     },
@@ -1439,6 +1470,8 @@ export function parsePathologyReport(reportText: string): ParsedReport {
         /invad(es?|ing|ed)\s*(the\s*)?main\s*bronchus/i,
         /main\s*bronchus\s*invasion/i,
         /main\s*bronchus\s*involvement/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\bmain\s*bronchus/i,
       ],
       keywords: ['main bronchus invasion', 'main bronchus']
     },
@@ -1447,6 +1480,8 @@ export function parsePathologyReport(reportText: string): ParsedReport {
         /invad(es?|ing|ed)\s*(the\s*)?diaphragm/i,
         /diaphragm(atic)?\s*invasion/i,
         /extends?\s*(into|to)\s*(the\s*)?diaphragm/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\bdiaphragm/i,
       ],
       keywords: ['diaphragm invasion', 'diaphragm']
     },
@@ -1458,6 +1493,8 @@ export function parsePathologyReport(reportText: string): ParsedReport {
         /extends?\s*(into|to|through)\s*(the\s*)?hilar\s*(fat|soft\s*tissue)/i,
         /infiltrat(es?|ing|ed)\s*(the\s*)?hilar\s*(fat|soft\s*tissue)/i,
         /tumor\s*(extends?|invades?)\s*(into\s*)?(the\s*)?hilar\s*(fat|soft\s*tissue)/i,
+        // BRIDGE PATTERNS
+        /invasion\b[^.]{0,80}\bhilar\s*(fat|soft\s*tissue)/i,
       ],
       keywords: ['hilar fat', 'hilar soft tissue', 'direct extension into hilar']
     },
@@ -2028,12 +2065,17 @@ ${gateDetail}`;
       /invasion\s+(?:into|of)\b[^.]{0,80}\bintercostal/i,
       /(?:underlying|adjacent)\s+intercostal\s*muscle/i,
       /invasion\b[^.]{0,80}\bintercostal\s*muscle/i,
+      // RIB BRIDGE PATTERNS
+      /invasion\b[^.]{0,80}\bribs?\b/i,
+      /(?:underlying|adjacent)\s+ribs?\b/i,
     ];
     for (const pattern of intercostalPatterns) {
-      if (pattern.test(rawText) && !isNegatedFindingLocal('intercostal', rawText)) {
+      const isIntercostalPattern = pattern.source.includes('intercostal');
+      const negationTerm = isIntercostalPattern ? 'intercostal' : 'rib';
+      if (pattern.test(rawText) && !isNegatedFindingLocal(negationTerm, rawText)) {
         gate1Triggered = true;
         gate1Stage = 'pT3';
-        gate1Detail = 'Intercostal muscle invasion → pT3';
+        gate1Detail = 'Intercostal muscle/rib invasion → pT3';
         break;
       }
     }
