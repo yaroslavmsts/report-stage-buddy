@@ -791,5 +791,46 @@ describe('Integration: Deterministic Gated Engine', () => {
       expect(result.clinicalChecklist?.clinicalVerdict).toContain('pT4');
       expect(result.clinicalChecklist?.clinicalVerdict).toContain('anatomical');
     });
+
+    it('anatomical override checklist shows size as overridden, not invasive_used', () => {
+      const report = 'Squamous cell carcinoma, 3.0 cm. Tumor invades the phrenic nerve.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      // When anatomical override triggers, measurement should be 'not_applicable', NOT 'invasive_used'
+      expect(result.clinicalChecklist?.measurementSelection.status).toBe('not_applicable');
+      expect(result.clinicalChecklist?.measurementSelection.detail).toContain('overridden by anatomical');
+    });
+
+    it('component gate checklist shows invasive_used status', () => {
+      const report = 'Invasive adenocarcinoma with lepidic component. Total tumor size 4.2 cm. Invasive component is 0.4 cm.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.clinicalChecklist?.measurementSelection.status).toBe('invasive_used');
+      expect(result.clinicalChecklist?.measurementSelection.detail).toContain('CAP Note A');
+    });
+
+    it('anatomical scan findings correctly show Positive for detected structures', () => {
+      const report = 'Squamous cell carcinoma, 2.0 cm. Tumor invades the phrenic nerve.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.clinicalChecklist?.anatomicalScan.status).toBe('positive');
+      expect(result.clinicalChecklist?.anatomicalScan.findings['Phrenic Nerve']).toBe('Positive');
+    });
+  });
+
+  describe('Edge Cases: Diaphragm detection via extended patterns', () => {
+    it('"extends into the diaphragm" → pT4 (primary detector)', () => {
+      const report = 'Adenocarcinoma, 2.0 cm. Tumor extends into the diaphragm.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('"involves the diaphragm" → pT4 (primary detector)', () => {
+      const report = 'Squamous cell carcinoma, 1.5 cm. The tumor involves the diaphragm.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
   });
 });
