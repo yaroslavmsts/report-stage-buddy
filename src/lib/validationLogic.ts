@@ -450,6 +450,13 @@ export function detectPT4Structures(
         /extends?\s*(into|to|through)\s*(the\s*)?mediastinal\s*(fat|soft\s*tissue)/i,
         /infiltrat(es?|ing|ed)\s*(the\s*)?mediastinal\s*(fat|soft\s*tissue)/i,
         /invasion\s*(of|into)\s*(the\s*)?mediastinal\s*(fat|soft\s*tissue)/i,
+        /involves?\s*(the\s*)?mediastinum/i,
+        /mediastinum\s*(is\s*)?(invaded|involved|infiltrated)/i,
+        /extends?\s*(into|to|through)\s*(the\s*)?mediastinum/i,
+        /involves?\s*(the\s*)?mediastinal\s*(fat|soft\s*tissue)/i,
+        /mediastinal\s*(fat|soft\s*tissue)\s*(is\s*)?(invaded|involved|infiltrated)/i,
+        /tumor\s*(extends?|invades?|involves?)\s*(into\s*)?(the\s*)?mediastin(um|al\s*(fat|soft\s*tissue))/i,
+        /direct\s*(invasion|extension)\s*(of|into|to)\s*(the\s*)?mediastinal\s*(fat|soft\s*tissue)/i,
       ],
       display: 'Mediastinum'
     },
@@ -530,6 +537,11 @@ export function detectPT4Structures(
         /phrenic\s*nerve\s*invasion/i,
         /phrenic\s*nerve\s*involvement/i,
         /involves?\s*(the\s*)?phrenic\s*nerve/i,
+        /extends?\s*(into|to|through)\s*(the\s*)?phrenic\s*nerve/i,
+        /direct\s*(invasion|extension)\s*(of|into|to)\s*(the\s*)?phrenic\s*nerve/i,
+        /phrenic\s*nerve\s*(is\s*)?(invaded|involved|infiltrated|encased|destroyed)/i,
+        /infiltrat(es?|ing|ed)\s*(the\s*)?phrenic\s*nerve/i,
+        /tumor\s*(extends?|invades?|involves?)\s*(into\s*)?(the\s*)?phrenic\s*nerve/i,
       ],
       display: 'Phrenic Nerve'
     },
@@ -1790,18 +1802,19 @@ ${gateDetail}`;
               : 'No measurement extracted'),
       },
       anatomicalScan: {
-        status: (triggeredGate === 2) ? 'positive' : 'negative',
+        status: (triggeredGate === 1) ? 'positive' : 'negative',
         findings: {
           'Hilar Fat': inputs.direct_invasion.hilar_fat ? 'Positive' : 'Negative',
           'Chest Wall': inputs.direct_invasion.chest_wall ? 'Positive' : 'Negative',
-          'Intercostal': 'Negative',
-          'Mediastinum': inputs.pT4_invasion?.mediastinum ? 'Positive' : 'Negative',
+          'Phrenic Nerve': inputs.direct_invasion.phrenic_nerve ? 'Positive' : (pT4Override.structures.includes('Phrenic Nerve') ? 'Positive' : 'Negative'),
+          'Diaphragm': inputs.direct_invasion.diaphragm ? 'Positive' : (pT4Override.structures.includes('Diaphragm') ? 'Positive' : 'Negative'),
+          'Mediastinum': pT4Override.structures.includes('Mediastinum') ? 'Positive' : 'Negative',
           'Visceral Pleura': inputs.pleural_invasion.has_visceral_pleural_invasion 
             ? `Positive (${inputs.pleural_invasion.pl_status || 'PL1'})` as 'Positive'
             : 'Negative',
-          'Carina': inputs.pT4_invasion?.carina ? 'Positive' : 'Negative',
+          'Carina': pT4Override.structures.includes('Carina') ? 'Positive' : 'Negative',
         },
-        triggeredOverride: (triggeredGate === 2) ? gateDetail : null,
+        triggeredOverride: (triggeredGate === 1) ? gateDetail : null,
       },
       lateralityCheck: {
         status: (triggeredGate === 3) 
@@ -1912,12 +1925,20 @@ ${gateDetail}`;
   const isNegatedFindingLocal = (finding: string, text: string): boolean => {
     const normalizedText = text.toLowerCase();
     const normalizedFinding = finding.toLowerCase();
-    const negationPhrases = ['not', 'no', 'without', 'negative', 'absent', 'intact', 'free'];
+    const negationPhrases = ['not ', 'no ', 'without ', 'negative ', 'absent', 'intact', 'free of', 'free from'];
     const findingIndex = normalizedText.indexOf(normalizedFinding);
     if (findingIndex === -1) return false;
     const windowStart = Math.max(0, findingIndex - 40);
     const windowText = normalizedText.substring(windowStart, findingIndex);
-    return negationPhrases.some(phrase => windowText.includes(phrase));
+    // Use word-boundary-safe matching to avoid false positives like 'no' inside 'carcinoma'
+    return negationPhrases.some(phrase => {
+      const phraseIndex = windowText.indexOf(phrase);
+      if (phraseIndex === -1) return false;
+      // Ensure the phrase is at a word boundary (start of string or preceded by space/punctuation)
+      if (phraseIndex === 0) return true;
+      const charBefore = windowText[phraseIndex - 1];
+      return /[\s,.:;(]/.test(charBefore);
+    });
   };
 
   let gate1Triggered = false;
@@ -1927,18 +1948,44 @@ ${gateDetail}`;
   // Use pre-detected pT4 structures from parseReport (SINGLE-PASS — no re-detection)
   // pT4 structures: mediastinum (incl. mediastinal fat), heart, great vessels, trachea,
   // recurrent laryngeal nerve, esophagus, vertebral body, carina, diaphragm, phrenic nerve
-  if (!effectiveHasConflict && pT4Override.detected) {
+  //
+  // CRITICAL: pT4 anatomical overrides are NON-NEGOTIABLE. They MUST NOT be suppressed
+  // by unrelated conflict detection. The detectPT4Structures function already handles
+  // negation checking. A conflict about "pleural invasion" must not block a clear
+  // "phrenic nerve invasion" finding.
+  if (pT4Override.detected) {
     gate1Triggered = true;
     gate1Stage = 'pT4';
     gate1Detail = `Invasion of: ${pT4Override.structures.join(', ')} → pT4`;
   }
 
-  // Intercostal muscle/rib invasion → pT3
-  if (!gate1Triggered && !effectiveHasConflict) {
+  // SAFETY NET: If detectPT4Structures missed phrenic nerve but direct_invasion caught it,
+  // force pT4. Phrenic nerve is a NON-NEGOTIABLE pT4 trigger.
+  if (!gate1Triggered && inputs.direct_invasion.phrenic_nerve) {
+    gate1Triggered = true;
+    gate1Stage = 'pT4';
+    gate1Detail = 'Invasion of: Phrenic Nerve → pT4';
+  }
+
+  // SAFETY NET: If detectPT4Structures missed diaphragm but direct_invasion caught it,
+  // force pT4. Diaphragm invasion is a NON-NEGOTIABLE pT4 trigger.
+  if (!gate1Triggered && inputs.direct_invasion.diaphragm) {
+    gate1Triggered = true;
+    gate1Stage = 'pT4';
+    gate1Detail = 'Invasion of: Diaphragm → pT4';
+  }
+
+  // Intercostal muscle/rib invasion → pT3 (non-negotiable anatomical override)
+  if (!gate1Triggered) {
     const intercostalPatterns = [
       /invad(es?|ing|ed)\s*(the\s*)?(intercostal|rib)/i,
       /intercostal\s*(muscle)?\s*invasion/i,
       /rib\s*invasion/i,
+      /extends?\s*(into|to|through)\s*(the\s*)?(intercostal|rib)/i,
+      /intercostal\s*(muscle)?\s*(is\s*)?(invaded|involved|infiltrated)/i,
+      /intercostal\s*(muscle)?\s*involvement/i,
+      /involves?\s*(the\s*)?intercostal\s*muscle/i,
+      /tumor\s*(extends?|invades?|involves?)\s*(into\s*)?(the\s*)?intercostal/i,
     ];
     for (const pattern of intercostalPatterns) {
       if (pattern.test(rawText) && !isNegatedFindingLocal('intercostal', rawText)) {
@@ -1950,14 +1997,14 @@ ${gateDetail}`;
     }
   }
 
-  // Chest wall invasion → pT3
-  if (!gate1Triggered && !effectiveHasConflict && inputs.direct_invasion.chest_wall) {
+  // Chest wall invasion → pT3 (non-negotiable anatomical override)
+  if (!gate1Triggered && inputs.direct_invasion.chest_wall) {
     gate1Triggered = true;
     gate1Stage = 'pT3';
     gate1Detail = 'Chest wall invasion → pT3';
   }
 
-  // NOTE: Phrenic nerve is now detected as pT4 via detectPT4Structures (non-negotiable pT4 trigger)
+  // NOTE: Phrenic nerve is now detected as pT4 via detectPT4Structures AND safety net.
   // It no longer appears here as pT3.
 
   // Parietal pleura (PL3) → pT3
