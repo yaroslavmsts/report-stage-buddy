@@ -410,14 +410,6 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
         </CardContent>
       </Card>
 
-      {/* ============================================================
-          SECTION 3: PATHOLOGY VALIDATION SUMMARY (BELOW DASHBOARD)
-          ============================================================ */}
-      <PathologySummary
-        parsedReport={parsedReport}
-        calculatedResult={calculatedResult}
-        checklist={calculatedResult.clinicalChecklist}
-      />
 
       {/* ============================================================
           SECTION 4: CLINICAL REASONING
