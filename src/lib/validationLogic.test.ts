@@ -833,4 +833,54 @@ describe('Integration: Deterministic Gated Engine', () => {
       expect(result.t_category).toBe('pT4');
     });
   });
+
+  describe('Circuit Breaker: Intercostal muscle + parietal pleura detection', () => {
+    it('intercostal muscle via "invasion into ... and underlying intercostal muscle" → pT3', () => {
+      const report = 'Squamous cell carcinoma of the LUL measuring 4.1 cm. There is direct microscopic evidence of invasion into the parietal pleura and underlying intercostal muscle.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT3');
+      expect(result.stage_group).toContain('IIB');
+    });
+
+    it('parietal pleura invasion maps to PL3 → pT3', () => {
+      const report = 'Adenocarcinoma measuring 1.5 cm with invasion into the parietal pleura.';
+      const parsed = parsePathologyReport(report);
+      expect(parsed.inputs.pleural_invasion.pl_status).toBe('PL3');
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT3');
+    });
+
+    it('intercostal muscle alone triggers pT3 override over size', () => {
+      const report = 'Squamous cell carcinoma, 1.2 cm. Tumor extends into the intercostal muscle.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT3');
+    });
+
+    it('"underlying intercostal muscle" in invasion context → pT3', () => {
+      const report = 'There is evidence of invasion into the chest wall and underlying intercostal muscle. Tumor measures 2.0 cm.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT3');
+    });
+
+    it('intercostal + parietal pleura: Gate 1 triggers, size is forbidden', () => {
+      const report = 'Squamous cell carcinoma of the LUL measuring 4.1 cm. There is direct microscopic evidence of invasion into the parietal pleura and underlying intercostal muscle.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      // Size (4.1 cm → pT2b) must NOT be used; anatomical override → pT3
+      expect(result.t_category).toBe('pT3');
+      expect(result.clinicalChecklist?.anatomicalScan.status).toBe('positive');
+      expect(result.clinicalChecklist?.measurementSelection.status).toBe('not_applicable');
+    });
+
+    it('negated intercostal does NOT trigger override', () => {
+      const report = 'Squamous cell carcinoma, 4.1 cm. No invasion into the intercostal muscle.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      // Should fall through to Gate 4 size-based
+      expect(result.t_category).not.toBe('pT3');
+    });
+  });
 });
