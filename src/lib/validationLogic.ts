@@ -1340,7 +1340,29 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     }
   }
   
-  // Positive pleural invasion patterns
+  // ============================================
+  // PARIETAL PLEURA → PL3 MAPPING
+  // Per AJCC 8th Edition, invasion of the parietal pleura = PL3 → pT3
+  // This must be detected separately from visceral pleural invasion
+  // ============================================
+  const parietalPleuraPatterns = [
+    /invasion\s+(?:into|of)\s+(?:the\s+)?parietal\s+pleura/i,
+    /invad(es?|ing|ed)\s+(?:the\s+)?parietal\s+pleura/i,
+    /parietal\s+pleur(a|al)\s+(invasion|involvement|infiltration)/i,
+    /involves?\s+(?:the\s+)?parietal\s+pleura/i,
+    /extends?\s+(?:into|to|through)\s+(?:the\s+)?parietal\s+pleura/i,
+    /parietal\s+pleura\s+(is\s+)?(invaded|involved|infiltrated)/i,
+    /invasion\b[^.]{0,60}\bparietal\s+pleura/i,
+  ];
+  
+  const hasParietalPleuraInvasion = !isPleuralNegated && parietalPleuraPatterns.some(p => p.test(text));
+  if (hasParietalPleuraInvasion) {
+    inputs.pleural_invasion.has_visceral_pleural_invasion = true;
+    inputs.pleural_invasion.pl_status = 'PL3';
+    extractedText.histologyFindings.push('Pleural invasion: PL3 (parietal pleura invaded)');
+  }
+  
+  // Positive pleural invasion patterns (visceral)
   const pleuralPatterns = [
     /\bpl1\b/i,
     /\bpl2\b/i,
@@ -1352,8 +1374,8 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     /positive\s*(for\s*)?(visceral\s*)?pleural\s*invasion/i,
   ];
 
-  // Only detect pleural invasion if NOT in a negative context
-  if (!isPleuralNegated) {
+  // Only detect visceral pleural invasion if NOT already detected via parietal and NOT in a negative context
+  if (!hasParietalPleuraInvasion && !isPleuralNegated) {
     for (const pattern of pleuralPatterns) {
       if (pattern.test(text)) {
         inputs.pleural_invasion.has_visceral_pleural_invasion = true;
@@ -1375,7 +1397,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
         break;
       }
     }
-  } else {
+  } else if (!hasParietalPleuraInvasion) {
     // Log that pleural invasion was detected as negative
     if (pleuralPatterns.some(p => p.test(text)) || /pleura/i.test(text)) {
       extractedText.histologyFindings.push('Visceral pleura: intact/negative for invasion');
@@ -2001,12 +2023,17 @@ ${gateDetail}`;
       /intercostal\s*(muscle)?\s*involvement/i,
       /involves?\s*(the\s*)?intercostal\s*muscle/i,
       /tumor\s*(extends?|invades?|involves?)\s*(into\s*)?(the\s*)?intercostal/i,
+      // BROAD PATTERNS: Capture "invasion into X and underlying intercostal muscle"
+      // where the invasion verb is separated from "intercostal" by intervening text
+      /invasion\s+(?:into|of)\b[^.]{0,80}\bintercostal/i,
+      /(?:underlying|adjacent)\s+intercostal\s*muscle/i,
+      /invasion\b[^.]{0,80}\bintercostal\s*muscle/i,
     ];
     for (const pattern of intercostalPatterns) {
       if (pattern.test(rawText) && !isNegatedFindingLocal('intercostal', rawText)) {
         gate1Triggered = true;
         gate1Stage = 'pT3';
-        gate1Detail = 'Intercostal/rib invasion → pT3';
+        gate1Detail = 'Intercostal muscle invasion → pT3';
         break;
       }
     }
