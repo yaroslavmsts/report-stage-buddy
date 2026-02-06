@@ -2,8 +2,8 @@
 // SINGLE-PASS 4-GATE ARCHITECTURE v9.0.0
 // ============================================
 // Gate Hierarchy (checked in THIS SPECIFIC ORDER per Logic Hierarchy spec):
-// GATE 1: Component - IF Adenocarcinoma + Invasive Size, stage based on invasive size → STOP.
-// GATE 2: Anatomical - Scan for pT4/pT3/pT2a overrides (hilar fat, chest wall, mediastinum, etc.). Override → STOP.
+// GATE 1: Anatomical - Scan for pT4/pT3/pT2a overrides (phrenic nerve, mediastinum, chest wall, etc.). Override → STOP.
+// GATE 2: Component - IF Adenocarcinoma + Invasive Size (Note A), stage based on invasive size → STOP.
 // GATE 3: Laterality - IF multiple lobes same lung, set pT4 → STOP.
 // GATE 4: Default - Use total tumor size ONLY if Gates 1-3 are empty.
 //
@@ -445,6 +445,11 @@ export function detectPT4Structures(
         /invad(es?|ing|ed)\s*(the\s*)?mediastinum/i,
         /mediastinal\s*invasion/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?mediastinum/i,
+        /mediastinal\s*(fat|soft\s*tissue)\s*(invasion|involvement|infiltration)/i,
+        /invad(es?|ing|ed)\s*(the\s*)?mediastinal\s*(fat|soft\s*tissue)/i,
+        /extends?\s*(into|to|through)\s*(the\s*)?mediastinal\s*(fat|soft\s*tissue)/i,
+        /infiltrat(es?|ing|ed)\s*(the\s*)?mediastinal\s*(fat|soft\s*tissue)/i,
+        /invasion\s*(of|into)\s*(the\s*)?mediastinal\s*(fat|soft\s*tissue)/i,
       ],
       display: 'Mediastinum'
     },
@@ -518,6 +523,15 @@ export function detectPT4Structures(
         /direct\s*invasion\s*(of|into)\s*(the\s*)?diaphragm/i,
       ],
       display: 'Diaphragm'
+    },
+    phrenic_nerve: {
+      patterns: [
+        /invad(es?|ing|ed)\s*(the\s*)?phrenic\s*nerve/i,
+        /phrenic\s*nerve\s*invasion/i,
+        /phrenic\s*nerve\s*involvement/i,
+        /involves?\s*(the\s*)?phrenic\s*nerve/i,
+      ],
+      display: 'Phrenic Nerve'
     },
   };
   
@@ -1643,14 +1657,15 @@ export function parsePathologyReport(reportText: string): ParsedReport {
 }
 
 // ============================================
-// SINGLE-PASS 4-GATE ARCHITECTURE v9.0.0
+// SINGLE-PASS 4-GATE ARCHITECTURE v10.0.0
 // ============================================
-// Gate order per Logic Hierarchy spec:
-// GATE 1: Component - IF Adenocarcinoma + Invasive Size, stage based on invasive size → STOP.
-// GATE 2: Anatomical - Scan for pT4/pT3/pT2a overrides (hilar fat, chest wall, mediastinum, etc.). Override → STOP.
+// Gate order per MANDATORY HIERARCHY (anatomical overrides are absolute):
+// GATE 1: Anatomical - Scan for pT4/pT3/pT2a overrides (phrenic nerve, mediastinum, chest wall, etc.). Override → STOP.
+// GATE 2: Component - IF Adenocarcinoma + Invasive Size (Note A), stage based on invasive size → STOP.
 // GATE 3: Laterality - IF multiple lobes same lung, set pT4 → STOP.
 // GATE 4: Default - Use total tumor size ONLY if Gates 1-3 are empty.
 //
+// MANDATORY: You are FORBIDDEN from using tumor size if an anatomical override is present.
 // SINGLE-PASS RULE: All detection is done once in parseReport().
 // runValidation() uses pre-detected data from ParsedReport — NO re-detection.
 // ============================================
@@ -1736,11 +1751,11 @@ ${gateDetail}`;
     let stagingBasis = '';
     
     if (triggeredGate === 1) {
-      clinicalVerdict = `Final stage ${finalTCategory} determined by invasive component (${size_basis_cm_val} cm). GATE 1 triggered → processing stopped.`;
-      stagingBasis = 'Component Size (GATE 1)';
+      clinicalVerdict = `Final stage ${finalTCategory} determined by anatomical invasion. Anatomical override takes absolute priority over tumor size.`;
+      stagingBasis = 'Anatomical Override (GATE 1)';
     } else if (triggeredGate === 2) {
-      clinicalVerdict = `Final stage ${finalTCategory} determined by anatomical invasion. GATE 2 triggered → processing stopped.`;
-      stagingBasis = 'Anatomical Override (GATE 2)';
+      clinicalVerdict = `Final stage ${finalTCategory} determined by invasive component (${size_basis_cm_val} cm). Component size used per AJCC Note A.`;
+      stagingBasis = 'Component Size (GATE 2)';
     } else if (triggeredGate === 3) {
       clinicalVerdict = `Final stage ${finalTCategory} determined by nodule laterality. GATE 3 triggered → processing stopped.`;
       stagingBasis = 'Laterality Override (GATE 3)';
@@ -1885,109 +1900,11 @@ ${gateDetail}`;
   }
 
   // ============================================
-  // GATE 1: COMPONENT SIZE (Adenocarcinoma + Invasive Size)
-  // MANDATORY: If Adenocarcinoma + Invasive Size found, use invasive size → STOP
-  // ============================================
-
-  let gate1Triggered = false;
-  let gate1Stage: string | null = null;
-  let gate1Detail = '';
-  let gate1Size: number | null = null;
-
-  if (isAdenocarcinoma && inputs.measurements_cm.invasive_size_cm !== null) {
-    gate1Triggered = true;
-    gate1Size = inputs.measurements_cm.invasive_size_cm;
-    
-    // Get stage based on invasive size
-    const sizeRule = getSizeBasedStage(gate1Size);
-    if (sizeRule) {
-      gate1Stage = sizeRule.stage;
-      gate1Detail = `Adenocarcinoma + Invasive Size (${gate1Size} cm) → ${gate1Stage}`;
-      
-      // Special case: pT1mi for invasive component ≤ 0.5 cm
-      if (gate1Size <= 0.5) {
-        gate1Stage = 'pT1mi';
-        gate1Detail = `Adenocarcinoma + Invasive Size (${gate1Size} cm ≤ 0.5 cm) → pT1mi`;
-      }
-    }
-  } else if (isAdenocarcinoma && 
-             inputs.histology.is_invasive_nonmucinous_adenocarcinoma_with_lepidic_component &&
-             inputs.measurements_cm.total_tumor_size_cm !== null &&
-             inputs.measurements_cm.percent_invasive_0_to_100 !== null) {
-    // Calculate estimated invasive size
-    const estimatedInvasiveSize = 
-      (inputs.measurements_cm.percent_invasive_0_to_100 / 100.0) *
-      inputs.measurements_cm.total_tumor_size_cm;
-    
-    gate1Triggered = true;
-    gate1Size = estimatedInvasiveSize;
-    
-    const sizeRule = getSizeBasedStage(gate1Size);
-    if (sizeRule) {
-      gate1Stage = sizeRule.stage;
-      gate1Detail = `Calculated Invasive Size (${gate1Size.toFixed(2)} cm) → ${gate1Stage}`;
-      
-      if (gate1Size <= 0.5) {
-        gate1Stage = 'pT1mi';
-        gate1Detail = `Calculated Invasive Size (${gate1Size.toFixed(2)} cm ≤ 0.5 cm) → pT1mi`;
-      }
-    }
-  }
-
-  // Record GATE 1 execution
-  gateExecutions.push({
-    gate: 'GATE 1',
-    name: 'Component',
-    status: gate1Triggered ? 'Triggered' : 'Skipped',
-    detail: gate1Triggered 
-      ? gate1Detail 
-      : (isAdenocarcinoma ? 'Adenocarcinoma but no invasive size found' : 'Non-adenocarcinoma histology'),
-    stoppedHere: gate1Triggered,
-  });
-
-  // If GATE 1 triggered → STOP
-  if (gate1Triggered && gate1Stage) {
-    // Add remaining gates as skipped
-    gateExecutions.push({
-      gate: 'GATE 2',
-      name: 'Anatomical',
-      status: 'Skipped',
-      detail: 'GATE 1 triggered → skipped',
-      stoppedHere: false,
-    });
-    gateExecutions.push({
-      gate: 'GATE 3',
-      name: 'Laterality',
-      status: 'Skipped',
-      detail: 'GATE 1 triggered → skipped',
-      stoppedHere: false,
-    });
-    gateExecutions.push({
-      gate: 'GATE 4',
-      name: 'Default',
-      status: 'Skipped',
-      detail: 'GATE 1 triggered → skipped',
-      stoppedHere: false,
-    });
-
-    const totalSizeNote = inputs.measurements_cm.total_tumor_size_cm !== null 
-      ? `\n\n**Total Size:** ${inputs.measurements_cm.total_tumor_size_cm} cm → **DISCARDED** (GATE 1 uses invasive component only)`
-      : '';
-
-    return buildGateResult(
-      'applicable',
-      gate1Stage,
-      'component_size',
-      gate1Size,
-      1,
-      `**GATE 1 TRIGGERED: Component Size**\n\n**Histology:** Adenocarcinoma identified\n**Invasive Size:** ${gate1Size} cm${totalSizeNote}\n**Stage:** ${gate1Stage}\n\nPer CAP Note A, for adenocarcinomas with lepidic component, T-staging uses invasive component only. Processing stopped at GATE 1.`,
-      gateExecutions
-    );
-  }
-
-  // ============================================
-  // GATE 2: ANATOMICAL OVERRIDE
-  // Scan for: pT4 structures, chest wall, phrenic nerve, PL3, hilar fat, VPI
+  // GATE 1: ANATOMICAL OVERRIDE (TOP PRIORITY)
+  // Anatomical invasion overrides ALL size-based staging.
+  // You are FORBIDDEN from using tumor size if an anatomical override is present.
+  // Scan for: pT4 structures (phrenic nerve, mediastinum, diaphragm, great vessels, etc.),
+  //           chest wall, PL3, hilar fat, VPI
   // Uses pre-detected data from parseReport — NO re-detection
   // IF found, apply Override Stage and STOP
   // ============================================
@@ -2003,19 +1920,21 @@ ${gateDetail}`;
     return negationPhrases.some(phrase => windowText.includes(phrase));
   };
 
-  let gate2Triggered = false;
-  let gate2Stage: string | null = null;
-  let gate2Detail = '';
+  let gate1Triggered = false;
+  let gate1Stage: string | null = null;
+  let gate1Detail = '';
 
   // Use pre-detected pT4 structures from parseReport (SINGLE-PASS — no re-detection)
+  // pT4 structures: mediastinum (incl. mediastinal fat), heart, great vessels, trachea,
+  // recurrent laryngeal nerve, esophagus, vertebral body, carina, diaphragm, phrenic nerve
   if (!effectiveHasConflict && pT4Override.detected) {
-    gate2Triggered = true;
-    gate2Stage = 'pT4';
-    gate2Detail = `Invasion of: ${pT4Override.structures.join(', ')} → pT4`;
+    gate1Triggered = true;
+    gate1Stage = 'pT4';
+    gate1Detail = `Invasion of: ${pT4Override.structures.join(', ')} → pT4`;
   }
 
   // Intercostal muscle/rib invasion → pT3
-  if (!gate2Triggered && !effectiveHasConflict) {
+  if (!gate1Triggered && !effectiveHasConflict) {
     const intercostalPatterns = [
       /invad(es?|ing|ed)\s*(the\s*)?(intercostal|rib)/i,
       /intercostal\s*(muscle)?\s*invasion/i,
@@ -2023,56 +1942,151 @@ ${gateDetail}`;
     ];
     for (const pattern of intercostalPatterns) {
       if (pattern.test(rawText) && !isNegatedFindingLocal('intercostal', rawText)) {
-        gate2Triggered = true;
-        gate2Stage = 'pT3';
-        gate2Detail = 'Intercostal/rib invasion → pT3';
+        gate1Triggered = true;
+        gate1Stage = 'pT3';
+        gate1Detail = 'Intercostal/rib invasion → pT3';
         break;
       }
     }
   }
 
   // Chest wall invasion → pT3
-  if (!gate2Triggered && !effectiveHasConflict && inputs.direct_invasion.chest_wall) {
-    gate2Triggered = true;
-    gate2Stage = 'pT3';
-    gate2Detail = 'Chest wall invasion → pT3';
+  if (!gate1Triggered && !effectiveHasConflict && inputs.direct_invasion.chest_wall) {
+    gate1Triggered = true;
+    gate1Stage = 'pT3';
+    gate1Detail = 'Chest wall invasion → pT3';
   }
 
-  // Phrenic nerve invasion → pT3
-  if (!gate2Triggered && !effectiveHasConflict && inputs.direct_invasion.phrenic_nerve) {
-    gate2Triggered = true;
-    gate2Stage = 'pT3';
-    gate2Detail = 'Phrenic nerve invasion → pT3';
-  }
+  // NOTE: Phrenic nerve is now detected as pT4 via detectPT4Structures (non-negotiable pT4 trigger)
+  // It no longer appears here as pT3.
 
   // Parietal pleura (PL3) → pT3
-  if (!gate2Triggered && !effectiveHasConflict && inputs.pleural_invasion.pl_status === 'PL3') {
-    gate2Triggered = true;
-    gate2Stage = 'pT3';
-    gate2Detail = 'Parietal pleural invasion (PL3) → pT3';
+  if (!gate1Triggered && !effectiveHasConflict && inputs.pleural_invasion.pl_status === 'PL3') {
+    gate1Triggered = true;
+    gate1Stage = 'pT3';
+    gate1Detail = 'Parietal pleural invasion (PL3) → pT3';
   }
 
   // Hilar fat/soft tissue invasion → pT2a
-  if (!gate2Triggered && !effectiveHasConflict && inputs.direct_invasion.hilar_fat) {
-    gate2Triggered = true;
-    gate2Stage = 'pT2a';
-    gate2Detail = 'Hilar fat/soft tissue invasion → pT2a';
+  if (!gate1Triggered && !effectiveHasConflict && inputs.direct_invasion.hilar_fat) {
+    gate1Triggered = true;
+    gate1Stage = 'pT2a';
+    gate1Detail = 'Hilar fat/soft tissue invasion → pT2a';
   }
 
   // Visceral pleural invasion (PL1/PL2) → pT2a
-  if (!gate2Triggered && !effectiveHasConflict && inputs.pleural_invasion.has_visceral_pleural_invasion &&
+  if (!gate1Triggered && !effectiveHasConflict && inputs.pleural_invasion.has_visceral_pleural_invasion &&
       (inputs.pleural_invasion.pl_status === 'PL1' || inputs.pleural_invasion.pl_status === 'PL2')) {
+    gate1Triggered = true;
+    gate1Stage = 'pT2a';
+    gate1Detail = `Visceral pleural invasion (${inputs.pleural_invasion.pl_status}) → pT2a`;
+  }
+
+  // Record GATE 1 execution
+  gateExecutions.push({
+    gate: 'GATE 1',
+    name: 'Anatomical',
+    status: gate1Triggered ? 'Triggered' : 'Skipped',
+    detail: gate1Triggered ? gate1Detail : 'No anatomical override found',
+    stoppedHere: gate1Triggered,
+  });
+
+  // If GATE 1 triggered → STOP (anatomical overrides are absolute)
+  if (gate1Triggered && gate1Stage) {
+    // Add remaining gates as skipped
+    gateExecutions.push({
+      gate: 'GATE 2',
+      name: 'Component',
+      status: 'Skipped',
+      detail: 'Anatomical override triggered → skipped',
+      stoppedHere: false,
+    });
+    gateExecutions.push({
+      gate: 'GATE 3',
+      name: 'Laterality',
+      status: 'Skipped',
+      detail: 'Anatomical override triggered → skipped',
+      stoppedHere: false,
+    });
+    gateExecutions.push({
+      gate: 'GATE 4',
+      name: 'Default',
+      status: 'Skipped',
+      detail: 'Anatomical override triggered → skipped',
+      stoppedHere: false,
+    });
+
+    return buildGateResult(
+      'applicable',
+      gate1Stage,
+      'anatomical_override',
+      undefined,
+      1,
+      `**GATE 1 TRIGGERED: Anatomical Override**\n\n${gate1Detail}\n\nPer AJCC 8th Edition, anatomical invasion overrides size-based staging. Processing stopped at GATE 1.`,
+      gateExecutions
+    );
+  }
+
+  // ============================================
+  // GATE 2: COMPONENT SIZE (Note A - Adenocarcinoma + Invasive Size)
+  // Only reached if NO anatomical override is present.
+  // For adenocarcinomas with lepidic component, T-staging uses invasive size only.
+  // MANDATORY: If Adenocarcinoma + Invasive Size found, use invasive size → STOP
+  // ============================================
+
+  let gate2Triggered = false;
+  let gate2Stage: string | null = null;
+  let gate2Detail = '';
+  let gate2Size: number | null = null;
+
+  if (isAdenocarcinoma && inputs.measurements_cm.invasive_size_cm !== null) {
     gate2Triggered = true;
-    gate2Stage = 'pT2a';
-    gate2Detail = `Visceral pleural invasion (${inputs.pleural_invasion.pl_status}) → pT2a`;
+    gate2Size = inputs.measurements_cm.invasive_size_cm;
+    
+    // Get stage based on invasive size
+    const sizeRule = getSizeBasedStage(gate2Size);
+    if (sizeRule) {
+      gate2Stage = sizeRule.stage;
+      gate2Detail = `Adenocarcinoma + Invasive Size (${gate2Size} cm) → ${gate2Stage}`;
+      
+      // Special case: pT1mi for invasive component ≤ 0.5 cm
+      if (gate2Size <= 0.5) {
+        gate2Stage = 'pT1mi';
+        gate2Detail = `Adenocarcinoma + Invasive Size (${gate2Size} cm ≤ 0.5 cm) → pT1mi`;
+      }
+    }
+  } else if (isAdenocarcinoma && 
+             inputs.histology.is_invasive_nonmucinous_adenocarcinoma_with_lepidic_component &&
+             inputs.measurements_cm.total_tumor_size_cm !== null &&
+             inputs.measurements_cm.percent_invasive_0_to_100 !== null) {
+    // Calculate estimated invasive size
+    const estimatedInvasiveSize = 
+      (inputs.measurements_cm.percent_invasive_0_to_100 / 100.0) *
+      inputs.measurements_cm.total_tumor_size_cm;
+    
+    gate2Triggered = true;
+    gate2Size = estimatedInvasiveSize;
+    
+    const sizeRule = getSizeBasedStage(gate2Size);
+    if (sizeRule) {
+      gate2Stage = sizeRule.stage;
+      gate2Detail = `Calculated Invasive Size (${gate2Size.toFixed(2)} cm) → ${gate2Stage}`;
+      
+      if (gate2Size <= 0.5) {
+        gate2Stage = 'pT1mi';
+        gate2Detail = `Calculated Invasive Size (${gate2Size.toFixed(2)} cm ≤ 0.5 cm) → pT1mi`;
+      }
+    }
   }
 
   // Record GATE 2 execution
   gateExecutions.push({
     gate: 'GATE 2',
-    name: 'Anatomical',
+    name: 'Component',
     status: gate2Triggered ? 'Triggered' : 'Skipped',
-    detail: gate2Triggered ? gate2Detail : 'No anatomical override found',
+    detail: gate2Triggered 
+      ? gate2Detail 
+      : (isAdenocarcinoma ? 'Adenocarcinoma but no invasive size found' : 'Non-adenocarcinoma histology'),
     stoppedHere: gate2Triggered,
   });
 
@@ -2083,24 +2097,28 @@ ${gateDetail}`;
       gate: 'GATE 3',
       name: 'Laterality',
       status: 'Skipped',
-      detail: 'GATE 2 triggered → skipped',
+      detail: 'Component gate triggered → skipped',
       stoppedHere: false,
     });
     gateExecutions.push({
       gate: 'GATE 4',
       name: 'Default',
       status: 'Skipped',
-      detail: 'GATE 2 triggered → skipped',
+      detail: 'Component gate triggered → skipped',
       stoppedHere: false,
     });
+
+    const totalSizeNote = inputs.measurements_cm.total_tumor_size_cm !== null 
+      ? `\n\n**Total Size:** ${inputs.measurements_cm.total_tumor_size_cm} cm → **DISCARDED** (GATE 2 uses invasive component only)`
+      : '';
 
     return buildGateResult(
       'applicable',
       gate2Stage,
-      'anatomical_override',
-      undefined,
+      'component_size',
+      gate2Size,
       2,
-      `**GATE 2 TRIGGERED: Anatomical Override**\n\n${gate2Detail}\n\nPer AJCC 8th Edition, anatomical invasion overrides size-based staging. Processing stopped at GATE 2.`,
+      `**GATE 2 TRIGGERED: Component Size**\n\n**Histology:** Adenocarcinoma identified\n**Invasive Size:** ${gate2Size} cm${totalSizeNote}\n**Stage:** ${gate2Stage}\n\nPer CAP Note A, for adenocarcinomas with lepidic component, T-staging uses invasive component only. Processing stopped at GATE 2.`,
       gateExecutions
     );
   }

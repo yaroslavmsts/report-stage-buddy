@@ -464,6 +464,48 @@ describe('detectPT4Structures', () => {
       expect(result.detected).toBe(true);
       expect(result.structures).toContain('Great Vessels');
     });
+
+    it('detects phrenic nerve invasion as pT4', () => {
+      const text = 'Tumor invades the phrenic nerve.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(true);
+      expect(result.structures).toContain('Phrenic Nerve');
+    });
+
+    it('detects phrenic nerve involvement as pT4', () => {
+      const text = 'Phrenic nerve involvement is identified.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(true);
+      expect(result.structures).toContain('Phrenic Nerve');
+    });
+
+    it('detects mediastinal fat invasion as pT4', () => {
+      const text = 'Tumor invades the mediastinal fat.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(true);
+      expect(result.structures).toContain('Mediastinum');
+    });
+
+    it('detects mediastinal soft tissue invasion as pT4', () => {
+      const text = 'Mediastinal soft tissue invasion is present.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(true);
+      expect(result.structures).toContain('Mediastinum');
+    });
+
+    it('detects extension into mediastinal fat as pT4', () => {
+      const text = 'Tumor extends into the mediastinal fat.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(true);
+      expect(result.structures).toContain('Mediastinum');
+    });
+
+    it('detects diaphragm invasion as pT4', () => {
+      const text = 'Diaphragmatic invasion is identified.';
+      const result = detectPT4Structures(text, mockNegationCheck);
+      expect(result.detected).toBe(true);
+      expect(result.structures).toContain('Diaphragm');
+    });
   });
 
   describe('should NOT detect negated pT4 structures', () => {
