@@ -16,7 +16,6 @@ function extractNegativeFindings(parsedReport: ParsedReport): string[] {
   const negatives: string[] = [];
   const text = parsedReport.rawText.toLowerCase();
 
-  // Visceral pleural invasion
   if (
     text.includes('no visceral pleural invasion') ||
     text.includes('pleura intact') ||
@@ -28,7 +27,6 @@ function extractNegativeFindings(parsedReport: ParsedReport): string[] {
     negatives.push('Visceral Pleural Invasion');
   }
 
-  // Chest wall invasion
   if (
     text.includes('no chest wall invasion') ||
     text.match(/chest wall[^.]{0,30}not (involved|identified|seen)/i) ||
@@ -37,7 +35,6 @@ function extractNegativeFindings(parsedReport: ParsedReport): string[] {
     negatives.push('Chest Wall Invasion');
   }
 
-  // Pericardial invasion
   if (
     text.includes('no pericardial invasion') ||
     text.match(/pericardium[^.]{0,30}(negative|absent|not identified)/i) ||
@@ -46,7 +43,6 @@ function extractNegativeFindings(parsedReport: ParsedReport): string[] {
     negatives.push('Pericardial Invasion');
   }
 
-  // Lymphovascular invasion
   if (
     text.includes('no lymphovascular invasion') ||
     text.match(/lymphovascular invasion[^.]{0,30}(not identified|absent|negative|not seen)/i)
@@ -54,7 +50,6 @@ function extractNegativeFindings(parsedReport: ParsedReport): string[] {
     negatives.push('Lymphovascular Invasion');
   }
 
-  // Surgical margins
   if (
     text.match(/margins?[^.]{0,30}negative/i) ||
     text.match(/margins?[^.]{0,30}free/i) ||
@@ -63,7 +58,6 @@ function extractNegativeFindings(parsedReport: ParsedReport): string[] {
     negatives.push('Positive Surgical Margins');
   }
 
-  // Lymph node metastasis
   if (
     text.match(/lymph nodes?[^.]{0,40}negative/i) ||
     text.match(/\(0\/\d+\)/) ||
@@ -78,6 +72,7 @@ function extractNegativeFindings(parsedReport: ParsedReport): string[] {
 
 /**
  * Determines the primary metric used for staging.
+ * Uses natural clinical language — no gate or machine terminology.
  */
 function getPrimaryMetric(checklist?: ClinicalChecklistData, calculatedResult?: ValidationResultType): string {
   if (!checklist) return 'Not determined';
@@ -89,15 +84,21 @@ function getPrimaryMetric(checklist?: ClinicalChecklistData, calculatedResult?: 
   }
 
   if (basis.includes('Anatomical')) {
-    const triggeredGate = checklist.gateExecutions?.find(g => g.stoppedHere);
-    return triggeredGate?.detail?.replace(/→.*/, '').trim() || 'Anatomical override';
+    const triggeredExec = checklist.gateExecutions?.find(g => g.stoppedHere);
+    // Clean any gate/arrow notation from the detail string
+    const rawDetail = triggeredExec?.detail || '';
+    const cleaned = rawDetail
+      .replace(/→.*/, '')
+      .replace(/Gate\s*\d+/gi, '')
+      .replace(/GATE\s*\d+/gi, '')
+      .trim();
+    return cleaned || 'Anatomical override';
   }
 
   if (basis.includes('Laterality')) {
     return checklist.lateralityCheck.detail || 'Laterality override';
   }
 
-  // Default: size-based
   if (calculatedResult?.size_basis_cm != null) {
     return `Greatest dimension: ${calculatedResult.size_basis_cm.toFixed(1)} cm`;
   }
