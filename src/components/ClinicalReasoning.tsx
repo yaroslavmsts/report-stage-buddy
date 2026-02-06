@@ -10,7 +10,7 @@ interface ClinicalReasoningProps {
 
 /**
  * Generates 2-3 clear, clinical-grade reasoning sentences
- * written as if a pathologist is explaining their thoughts in a finalized report.
+ * written as if a pathologist is recording their final thoughts in a report.
  * No gate/machine terminology — natural pathologist voice only.
  */
 function generateClinicalReasoning(
@@ -29,32 +29,36 @@ function generateClinicalReasoning(
       const totalSize = checklist.measurementSelection.totalSize;
       if (totalSize) {
         sentences.push(
-          `Based on the ${checklist.measurementSelection.invasiveSize} cm invasive component, this case is staged as ${tCat} despite the larger ${totalSize} cm total tumor size.`
+          `The staging is driven by the ${checklist.measurementSelection.invasiveSize} cm invasive focus, which takes precedence over the ${totalSize} cm total tumor dimension per AJCC Note A, resulting in ${tCat} classification.`
         );
       } else {
         sentences.push(
-          `Based on the ${checklist.measurementSelection.invasiveSize} cm invasive component, this case is staged as ${tCat}.`
+          `The ${checklist.measurementSelection.invasiveSize} cm invasive component determines the staging as ${tCat}.`
         );
       }
     } else if (basis.includes('Anatomical')) {
-      const triggeredGate = checklist.gateExecutions?.find(g => g.stoppedHere);
-      const rawDetail = triggeredGate?.detail || '';
-      // Extract the anatomical site name without gate/arrow notation
-      const site = rawDetail.replace(/→.*/, '').replace(/Gate\s*\d+/gi, '').trim();
+      // Extract the anatomical site without any gate/arrow notation
+      const triggeredExec = checklist.gateExecutions?.find(g => g.stoppedHere);
+      const rawDetail = triggeredExec?.detail || '';
+      const site = rawDetail
+        .replace(/→.*/, '')
+        .replace(/Gate\s*\d+/gi, '')
+        .replace(/GATE\s*\d+/gi, '')
+        .trim();
       if (site) {
         sentences.push(
-          `The tumor demonstrates direct invasion of ${site.toLowerCase()}, which requires classification as ${tCat} regardless of tumor size.`
+          `Direct invasion of ${site.toLowerCase()} was identified, which requires ${tCat} classification regardless of tumor size.`
         );
       } else {
         sentences.push(
-          `An anatomical finding requires classification as ${tCat}, overriding standard size-based staging.`
+          `An anatomical finding was identified that requires ${tCat} classification, overriding standard size-based staging.`
         );
       }
     } else if (basis.includes('Laterality')) {
       const lateralDetail = checklist.lateralityCheck.detail || '';
       if (calculatedResult.m_category === 'pM1a') {
         sentences.push(
-          `A tumor nodule was identified in the contralateral lung, classifying this case as pM1a.`
+          `A tumor nodule was identified in the contralateral lung, requiring pM1a classification.`
         );
       } else if (lateralDetail.toLowerCase().includes('different') && lateralDetail.toLowerCase().includes('lobe')) {
         sentences.push(
@@ -66,7 +70,7 @@ function generateClinicalReasoning(
         );
       } else {
         sentences.push(
-          `Laterality assessment identified multi-lobe involvement, resulting in ${tCat} classification.`
+          `Multi-lobe involvement was identified, resulting in ${tCat} classification.`
         );
       }
     } else {
@@ -82,15 +86,16 @@ function generateClinicalReasoning(
     );
   }
 
-  // --- Sentence 2: Exclusion / Verification ---
+  // --- Sentence 2: Anatomical Exclusion / Verification ---
   const hasAnatomicalOverride = parsedReport.pT4Override?.detected;
   const hasContralateral = parsedReport.ipsilateralLobeInfo?.isContralateralNodule;
   const hasIpsilateral = parsedReport.ipsilateralLobeInfo?.isDifferentLobesSameLung;
   const hasSameLobe = parsedReport.ipsilateralLobeInfo?.isSameLobeNodule;
 
   if (hasAnatomicalOverride) {
+    const structures = parsedReport.pT4Override.structures.join(', ').toLowerCase();
     sentences.push(
-      `Critical structure invasion (${parsedReport.pT4Override.structures.join(', ')}) was confirmed on review of the submitted sections.`
+      `Critical structure invasion (${structures}) was confirmed on review of the submitted sections.`
     );
   } else if (hasContralateral) {
     sentences.push(
@@ -98,7 +103,7 @@ function generateClinicalReasoning(
     );
   } else if (hasIpsilateral || hasSameLobe) {
     sentences.push(
-      `No additional anatomical overrides or distant metastatic involvement were identified in the provided sections.`
+      `Central structures and pleural surfaces were evaluated and found to be uninvolved.`
     );
   } else {
     sentences.push(
@@ -113,7 +118,7 @@ function generateClinicalReasoning(
       : 'negative nodal status';
 
     sentences.push(
-      `The overall findings are consistent with a Stage ${calculatedResult.stage_group} classification with ${nodalLabel}.`
+      `The overall findings confirm a Stage ${calculatedResult.stage_group} classification with ${nodalLabel}.`
     );
   }
 
