@@ -1242,9 +1242,9 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     /(\d+\.?\d*)\s*cm\s*invasive\s*(?:component|focus|portion|tumor)/i,
     
     // BROAD BRIDGE PATTERNS - Capture distant phrasing
-    /invasive\s*focus\b[^.]{0,60}\b(?:measured|measuring)\s*(?:at\s*)?(\d+\.?\d*)\s*cm/i,
-    /invasion\b[^.]{0,60}\bmeasuring\s*(\d+\.?\d*)\s*cm/i,
-    /invasive\s*(?:component|focus)\b[^.]{0,60}\b(\d+\.?\d*)\s*cm/i,
+    /invasive\s*focus\b[^.]{0,80}\b(?:measured|measuring)\s*(?:at\s*)?(\d+\.?\d*)\s*cm/i,
+    /invasion\b[^.]{0,80}\bmeasuring\s*(\d+\.?\d*)\s*cm/i,
+    /invasive\s*(?:component|focus)\b[^.]{0,80}\b(\d+\.?\d*)\s*cm/i,
   ];
 
   for (const pattern of invasiveSizePatterns) {
@@ -1407,7 +1407,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     /involves?\s+(?:the\s+)?parietal\s+pleura/i,
     /extends?\s+(?:into|to|through)\s+(?:the\s+)?parietal\s+pleura/i,
     /parietal\s+pleura\s+(is\s+)?(invaded|involved|infiltrated)/i,
-    /invasion\b[^.]{0,60}\bparietal\s+pleura/i,
+    /invasion\b[^.]{0,80}\bparietal\s+pleura/i,
   ];
   
   const hasParietalPleuraInvasion = !isPleuralNegated && parietalPleuraPatterns.some(p => p.test(text));
