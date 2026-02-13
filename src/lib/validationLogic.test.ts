@@ -1098,3 +1098,160 @@ describe('Bridge Pattern Consistency (Issue #1-4)', () => {
     expect(result.pT4Override.detected).toBe(true);
   });
 });
+
+// ============================================
+// MASTER LOGIC RESET VERIFICATION TESTS
+// Maps 1:1 to the 5-point Priority-First Hierarchy
+// ============================================
+describe('Master Hierarchy Compliance', () => {
+  // === REQUIREMENT 1: Circuit Breaker (Gate 1) ===
+  describe('Req 1: Circuit Breaker - Anatomical overrides stop all calculations', () => {
+    it('phrenic nerve bridge → pT4, ignores 2.5cm size', () => {
+      const text = 'Squamous cell carcinoma 2.5 cm. Direct invasion into the pleura and phrenic nerve.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('mediastinal fat bridge → pT4, ignores 3.0cm size', () => {
+      const text = 'Squamous cell carcinoma 3.0 cm. There is evidence of invasion into the chest wall and mediastinal fat.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('diaphragm bridge → pT4, ignores size', () => {
+      const text = 'Adenocarcinoma measuring 1.8 cm with invasion into surrounding soft tissue and diaphragm.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('esophagus bridge → pT4', () => {
+      const text = 'Squamous cell carcinoma 4.0 cm. Invasion into tracheal wall and esophageal tissue confirmed.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('carina bridge → pT4', () => {
+      const text = 'Squamous cell carcinoma 2.1 cm with invasion extending to the carina.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('heart bridge → pT4', () => {
+      const text = 'Carcinoma 3.5 cm. Evidence of invasion into the pericardium and heart.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('great vessels bridge → pT4', () => {
+      const text = 'Squamous cell carcinoma 2.0 cm with invasion into great vessels.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('hilar fat → pT2a (lower priority anatomical override)', () => {
+      const text = 'Squamous cell carcinoma 1.5 cm. Direct extension into the hilar fat.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT2a');
+    });
+
+    it('visceral pleura PL1 → pT2a', () => {
+      const text = 'Adenocarcinoma 1.2 cm. Visceral pleural invasion present. PL1.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT2a');
+    });
+  });
+
+  // === REQUIREMENT 2: Adeno Lock (Gate 2) ===
+  describe('Req 2: Adeno Lock - Invasive size overrides total size', () => {
+    it('invasive focus 0.4 cm → pT1mi, ignores 4.2 cm total', () => {
+      const text = 'Invasive adenocarcinoma with lepidic component, total size 4.2 cm. Invasive component 0.4 cm.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT1mi');
+      expect(result.size_basis_cm).toBe(0.4);
+    });
+
+    it('invasive focus 0.4 cm via broad bridge → pT1mi, ignores 5.2 cm', () => {
+      const text = 'Invasive adenocarcinoma with lepidic component, total size 5.2 cm. The invasive focus is measured at 0.4 cm.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT1mi');
+    });
+
+    it('invasive component 1.5 cm → pT1b, ignores 3.0 cm total', () => {
+      const text = 'Invasive adenocarcinoma with lepidic component measuring 3.0 cm. Invasive component 1.5 cm.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT1b');
+    });
+  });
+
+  // === REQUIREMENT 3: Residual Default (Gate 4) ===
+  describe('Req 3: Residual Default - Size only when Gates 1-2 empty', () => {
+    it('no overrides, 3.5 cm → pT2a', () => {
+      const text = 'Squamous cell carcinoma measuring 3.5 cm. Margins clear.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT2a');
+    });
+
+    it('no overrides, 0.8 cm → pT1a', () => {
+      const text = 'Squamous cell carcinoma 0.8 cm. No evidence of invasion.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT1a');
+    });
+  });
+
+  // === REQUIREMENT 4: Hierarchy Priority Order ===
+  describe('Req 4: Gate 1 beats Gate 2 beats Gate 4', () => {
+    it('anatomical override (Gate 1) beats invasive size (Gate 2)', () => {
+      const text = 'Invasive adenocarcinoma with lepidic component 3.0 cm. Invasive component 0.4 cm. Direct invasion into the phrenic nerve.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      // Gate 1 (phrenic nerve → pT4) must override Gate 2 (0.4 cm → pT1mi)
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('invasive size (Gate 2) beats total size (Gate 4)', () => {
+      const text = 'Invasive adenocarcinoma with lepidic component, total size 6.0 cm. Invasive focus 0.3 cm.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      // Gate 2 (0.3 cm → pT1mi) must override Gate 4 (6.0 cm → pT3)
+      expect(result.t_category).toBe('pT1mi');
+    });
+  });
+
+  // === REQUIREMENT 5: Negative Guardrail ===
+  describe('Req 5: Negative guardrail invalidates overrides', () => {
+    it('"NOT identified" blocks phrenic nerve bridge → falls to size', () => {
+      const text = 'Squamous cell carcinoma 3.5 cm. Invasion into the phrenic nerve is NOT identified.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).not.toBe('pT4');
+    });
+
+    it('"no evidence of" blocks mediastinum bridge → falls to size', () => {
+      const text = 'Squamous cell carcinoma 2.0 cm. No evidence of invasion into the mediastinum.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).not.toBe('pT4');
+    });
+
+    it('"negative for" blocks chest wall → falls to size', () => {
+      const text = 'Squamous cell carcinoma 1.5 cm. Negative for invasion into the chest wall.';
+      const parsed = parsePathologyReport(text);
+      const result = runValidation(parsed);
+      expect(result.t_category).not.toBe('pT3');
+    });
+  });
+});
