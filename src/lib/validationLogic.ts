@@ -1441,6 +1441,8 @@ export function parsePathologyReport(reportText: string): ParsedReport {
         // BRIDGE PATTERNS
         /invasion\b[^.]{0,80}\bchest\s*wall/i,
         /(?:underlying|adjacent)\s+chest\s*wall/i,
+        // BRIDGE PATTERNS: Capture "invasion into X and chest wall"
+        /invasion\b[^.]{0,80}\bchest\s*wall/i,
       ],
       keywords: ['chest wall invasion', 'chest wall']
     },
