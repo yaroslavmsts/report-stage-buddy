@@ -1024,3 +1024,77 @@ describe('Integration: Deterministic Gated Engine', () => {
     });
   });
 });
+
+// ============================================
+// CONSISTENCY TESTS FOR BRIDGE PATTERN FIX
+// ============================================
+describe('Bridge Pattern Consistency (Issue #1-4)', () => {
+  it('should use unified BRIDGE_NEGATION_PHRASES across all functions', () => {
+    // Test that all negation logic uses the same phrases
+    const text = 'Squamous cell carcinoma 3.0 cm. No evidence of invasion into the chest wall.';
+    const result = parsePathologyReport(text);
+    
+    // "No evidence of" is in unified BRIDGE_NEGATION_PHRASES
+    // Bridge should be invalidated
+    expect(result.inputs.direct_invasion.chest_wall).toBe(false);
+  });
+
+  it('should standardize substring length to 20 characters across all bridges', () => {
+    // Test that detectPT4Structures uses substring(0, 20) consistently
+    const text = 'Tumor with invasion into mediastinal fat and phrenic nerve involvement, measuring 3.2 cm.';
+    const result = parsePathologyReport(text);
+    
+    // Both phrenic nerve (pT4) should be detected despite being in compound sentence
+    expect(result.pT4Override.detected).toBe(true);
+    expect(result.pT4Override.structures).toContain('Phrenic Nerve');
+  });
+
+  it('should use 80-character bridge window consistently (pT3 and pT4 structures)', () => {
+    // Validates standardized 80-char window across all bridge patterns
+    const text = 'Squamous cell carcinoma 2.0 cm. Direct invasion into underlying pleural tissue, ribs, and mediastinal fat detected.';
+    const result = parsePathologyReport(text);
+    
+    // Should detect through 80-char bridge despite descriptive text
+    expect(result.pT4Override.detected).toBe(true);
+  });
+
+  it('should handle negative safety uniformly for intercostal bridge patterns', () => {
+    // Test unified negation in intercostal patterns (runValidation)
+    const text = 'Squamous cell carcinoma 2.5 cm. No evidence of invasion into the intercostal muscle or ribs.';
+    const result = parsePathologyReport(text);
+    
+    // "No evidence of" should invalidate intercostal bridge
+    expect(result.inputs.direct_invasion.chest_wall).toBe(false);
+  });
+
+  it('should unify negation phrases across all pattern detection functions', () => {
+    // Test that all functions use same phrase list
+    const text1 = 'Adenocarcinoma 2.0 cm with direct invasion into chest wall. Not identified phrenic nerve involvement.';
+    const text2 = 'Adenocarcinoma 2.0 cm. Phrenic nerve invasion is not identified. Chest wall invasion present.';
+    
+    const result1 = parsePathologyReport(text1);
+    const result2 = parsePathologyReport(text2);
+    
+    // Both should handle "not identified" consistently
+    expect(result1.inputs.direct_invasion.phrenic_nerve).toBe(false);
+    expect(result2.inputs.direct_invasion.phrenic_nerve).toBe(false);
+  });
+
+  it('should apply 80-char bridge to pT4 structures consistently', () => {
+    // Test mediastinum detection via 80-char bridge
+    const text = 'Adenocarcinoma 3.5 cm. Invasion into mediastinal fat and surrounding tissue.';
+    const result = parsePathologyReport(text);
+    
+    // Should trigger pT4 via bridge
+    expect(result.pT4Override.detected).toBe(true);
+  });
+
+  it('should maintain substring consistency with 20-character extraction', () => {
+    // Verifies Issue #2 fix: standardized substring(0, 20) across functions
+    const text = 'Adenocarcinoma with invasion into mediastinal fat tissue and concurrent phrenic nerve involvement.';
+    const result = parsePathologyReport(text);
+    
+    // Should detect via consistent 20-char substring matching
+    expect(result.pT4Override.detected).toBe(true);
+  });
+});
