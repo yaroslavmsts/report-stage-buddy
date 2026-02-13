@@ -282,6 +282,14 @@ const STANDARD_NEGATION_PHRASES = [
 // Word proximity threshold for conflict detection (reduced from 10 to 4)
 const CONFLICT_PROXIMITY_THRESHOLD = 4;
 
+// UNIFIED SENTENCE-LEVEL NEGATION PHRASES (shared across all bridge patterns)
+// Used to invalidate bridge matches within a sentence context
+const BRIDGE_NEGATION_PHRASES = [
+  'not identified', 'no evidence of', 'no invasion', 'not seen', 'not present',
+  'not detected', 'negative for', 'absent', 'without invasion', 'free of',
+  'does not invade', 'did not invade', 'no sign of', 'is intact', 'are intact',
+];
+
 /**
  * Checks if a sentence contains a standard negation phrase that confirms negative status
  * These are clear, unambiguous negations that should NOT trigger conflict warnings
@@ -576,19 +584,12 @@ export function detectPT4Structures(
     },
   };
   
-  // SENTENCE-LEVEL NEGATION PHRASES that invalidate bridge matches
-  const sentenceNegationPhrases = [
-    'not identified', 'no evidence of', 'no invasion', 'not seen', 'not present',
-    'not detected', 'negative for', 'absent', 'without invasion', 'free of',
-    'does not invade', 'did not invade', 'no sign of', 'is intact', 'are intact',
-  ];
-
   const isBridgeSentenceNegated = (matchText: string): boolean => {
     // Extract the sentence containing the match (split by period)
     const sentences = text.split(/[.!?]/);
     for (const sentence of sentences) {
       if (sentence.includes(matchText.toLowerCase().substring(0, 20))) {
-        return sentenceNegationPhrases.some(neg => sentence.toLowerCase().includes(neg));
+        return BRIDGE_NEGATION_PHRASES.some(neg => sentence.toLowerCase().includes(neg));
       }
     }
     return false;
@@ -1530,18 +1531,11 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     },
   };
 
-  // SENTENCE-LEVEL NEGATION PHRASES for bridge pattern safety
-  const sentenceNegationPhrases = [
-    'not identified', 'no evidence of', 'no invasion', 'not seen', 'not present',
-    'not detected', 'negative for', 'absent', 'without invasion', 'free of',
-    'does not invade', 'did not invade', 'no sign of', 'is intact', 'are intact',
-  ];
-
   const isBridgeSentenceNegatedLocal = (matchStr: string): boolean => {
     const sentences = text.split(/[.!?]/);
     for (const sentence of sentences) {
       if (sentence.includes(matchStr.toLowerCase().substring(0, 20))) {
-        return sentenceNegationPhrases.some(neg => sentence.toLowerCase().includes(neg));
+        return BRIDGE_NEGATION_PHRASES.some(neg => sentence.toLowerCase().includes(neg));
       }
     }
     return false;
@@ -2123,17 +2117,12 @@ ${gateDetail}`;
       /invasion\b[^.]{0,80}\bribs?\b/i,
       /(?:underlying|adjacent)\s+ribs?\b/i,
     ];
-    // Sentence-level negation phrases for bridge safety
-    const bridgeNegPhrases = [
-      'not identified', 'no evidence of', 'no invasion', 'not seen', 'not present',
-      'not detected', 'negative for', 'absent', 'without invasion', 'free of',
-    ];
     const isBridgeNegatedInSentence = (matchText: string): boolean => {
       const lowerRaw = rawText.toLowerCase();
       const sentences = lowerRaw.split(/[.!?]/);
       for (const sentence of sentences) {
-        if (sentence.includes(matchText.toLowerCase().substring(0, 15))) {
-          return bridgeNegPhrases.some(neg => sentence.includes(neg));
+        if (sentence.includes(matchText.toLowerCase().substring(0, 20))) {
+          return BRIDGE_NEGATION_PHRASES.some(neg => sentence.includes(neg));
         }
       }
       return false;
