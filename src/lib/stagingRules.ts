@@ -318,9 +318,10 @@ export function getRulesWithOverrides(): StagingRule[] {
 
 // Get size-based staging rule
 export function getSizeBasedStage(size_cm: number): StagingRule | undefined {
-  // Filter to only size-based rules (priority 10) and find matching
+  // Filter to rules that have size ranges (any rule with max_size_cm or min_size_cm)
+  // This includes pT2a (priority 5) and pT3/pT4 which also have size ranges
   const sizeRules = STAGING_RULES.rules.filter(rule => 
-    rule.priority === 10 || (!rule.overrides && rule.max_size_cm !== undefined)
+    rule.max_size_cm !== undefined || rule.min_size_cm !== undefined
   );
   
   for (const rule of sizeRules) {
