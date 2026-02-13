@@ -958,13 +958,59 @@ describe('Integration: Deterministic Gated Engine', () => {
       expect(result.t_category).toBe('pT3');
     });
 
-    // Negation should still work with bridge patterns
+    // === NEGATIVE SAFETY: Bridge patterns must be invalidated by negation ===
     it('negated bridge pattern does NOT trigger override', () => {
       const report = 'Squamous cell carcinoma 3.0 cm. No invasion into the chest wall or mediastinum.';
       const parsed = parsePathologyReport(report);
       const result = runValidation(parsed);
       expect(result.t_category).not.toBe('pT4');
       expect(result.t_category).not.toBe('pT3');
+    });
+
+    it('"not identified" negates bridge pattern for phrenic nerve', () => {
+      const report = 'Squamous cell carcinoma 2.5 cm. Invasion into the phrenic nerve was not identified.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).not.toBe('pT4');
+    });
+
+    it('"no evidence of" negates bridge pattern for mediastinum', () => {
+      const report = 'Adenocarcinoma 3.0 cm. No evidence of invasion into the mediastinum or chest wall.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).not.toBe('pT4');
+      expect(result.t_category).not.toBe('pT3');
+    });
+
+    it('"negative for" negates bridge pattern for diaphragm', () => {
+      const report = 'Squamous cell carcinoma 2.0 cm. Negative for invasion into the diaphragm.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).not.toBe('pT4');
+    });
+
+    it('"absent" negates bridge for esophagus', () => {
+      const report = 'Adenocarcinoma 1.5 cm. Invasion into the esophagus is absent.';
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).not.toBe('pT4');
+    });
+
+    // === BROAD INVASIVE COMPONENT EXTRACTION ===
+    it('"invasive focus is measured at 0.4 cm" extracts invasive size for adenocarcinoma', () => {
+      const report = 'Adenocarcinoma with lepidic component, total size 2.5 cm. The invasive focus is measured at 0.4 cm.';
+      const parsed = parsePathologyReport(report);
+      expect(parsed.inputs.measurements_cm.invasive_size_cm).toBe(0.4);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT1mi');
+    });
+
+    it('"invasion measuring 0.8 cm" extracts invasive size for adenocarcinoma', () => {
+      const report = 'Invasive adenocarcinoma with lepidic component, total size 3.0 cm. There is a discrete focus of acinar invasion measuring 0.8 cm.';
+      const parsed = parsePathologyReport(report);
+      expect(parsed.inputs.measurements_cm.invasive_size_cm).toBe(0.8);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT1a');
     });
 
     // Pathologist voice check

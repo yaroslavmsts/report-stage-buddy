@@ -576,10 +576,34 @@ export function detectPT4Structures(
     },
   };
   
+  // SENTENCE-LEVEL NEGATION PHRASES that invalidate bridge matches
+  const sentenceNegationPhrases = [
+    'not identified', 'no evidence of', 'no invasion', 'not seen', 'not present',
+    'not detected', 'negative for', 'absent', 'without invasion', 'free of',
+    'does not invade', 'did not invade', 'no sign of', 'is intact', 'are intact',
+  ];
+
+  const isBridgeSentenceNegated = (matchText: string): boolean => {
+    // Extract the sentence containing the match (split by period)
+    const sentences = text.split(/[.!?]/);
+    for (const sentence of sentences) {
+      if (sentence.includes(matchText.toLowerCase().substring(0, 20))) {
+        return sentenceNegationPhrases.some(neg => sentence.toLowerCase().includes(neg));
+      }
+    }
+    return false;
+  };
+
   for (const [key, config] of Object.entries(pT4Patterns)) {
     for (const pattern of config.patterns) {
-      if (pattern.test(text)) {
-        // Check if negated
+      const match = pattern.exec(text);
+      if (match) {
+        // For bridge patterns, apply sentence-level negation check
+        const isBridge = pattern.source.includes('[^.]{0,80}');
+        if (isBridge && isBridgeSentenceNegated(match[0])) {
+          continue; // Negated bridge — skip
+        }
+        // Check if negated via standard negation
         if (!isNegatedFinding(key.replace(/_/g, ' '), text)) {
           detectedStructures.push(config.display);
           break;
@@ -1193,9 +1217,10 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   // Extract invasive size - FUZZY EXTRACTION for maximum clinical flexibility
   // GOLDEN RULE #2: Invasive size takes precedence over total size
   // Recognizes: 'Invasive component is X', 'Focus of invasion measures X', 'Invasive size X', etc.
+  // BROAD BRIDGE: Also captures 'invasive focus is measured at 0.4 cm', 'invasion measuring 0.4 cm'
   const invasiveSizePatterns = [
     // Standard formats
-    /invasive\s*size[:\s]+(\d+\.?\d*)\s*cm/i,  // "Invasive Size: 0.8 cm"
+    /invasive\s*size[:\s]+(\d+\.?\d*)\s*cm/i,
     /invasive\s*(component|focus|portion)[:\s]+(\d+\.?\d*)\s*cm/i,
     /invasive\s*tumor[:\s]+(\d+\.?\d*)\s*cm/i,
     /invasion[:\s]+(\d+\.?\d*)\s*cm/i,
@@ -1204,16 +1229,21 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     /size\s*of\s*invasive\s*(component)?[:\s]+(\d+\.?\d*)\s*cm/i,
     
     // FUZZY PATTERNS - Clinical narrative variations
-    /invasive\s*component\s*(?:is|measures?|measuring)\s*(\d+\.?\d*)\s*cm/i,  // "Invasive component is 0.4 cm"
-    /focus\s*of\s*invasion\s*(?:measures?|measuring|is)\s*(\d+\.?\d*)\s*cm/i,  // "Focus of invasion measures 0.5 cm"
-    /invasive\s*focus\s*(?:measures?|measuring|is|of)\s*(\d+\.?\d*)\s*cm/i,  // "Invasive focus of 0.3 cm"
+    /invasive\s*component\s*(?:is|measures?|measuring)\s*(\d+\.?\d*)\s*cm/i,
+    /focus\s*of\s*invasion\s*(?:measures?|measuring|is)\s*(\d+\.?\d*)\s*cm/i,
+    /invasive\s*focus\s*(?:measures?|measuring|is|of)\s*(\d+\.?\d*)\s*cm/i,
     /(?:the\s*)?invasive\s*(?:component|focus|portion)\s*(?:measures?|is|of)?\s*(\d+\.?\d*)\s*cm/i,
-    /(\d+\.?\d*)\s*cm\s*(?:focus\s*of\s*)?invasion/i,  // "0.4 cm focus of invasion"
+    /(\d+\.?\d*)\s*cm\s*(?:focus\s*of\s*)?invasion/i,
     /(?:focus|area|region)\s*of\s*(?:invasive|invasion)\s*(?:component\s*)?(?:measures?|measuring|is)?\s*(\d+\.?\d*)\s*cm/i,
-    /acinar\s*(?:invasion|component)\s*(?:measures?|measuring)\s*(\d+\.?\d*)\s*cm/i,  // "Acinar invasion measures 0.8 cm"
+    /acinar\s*(?:invasion|component)\s*(?:measures?|measuring)\s*(\d+\.?\d*)\s*cm/i,
     /(?:discrete|single)\s*focus\s*of\s*(?:acinar\s*)?invasion\s*(?:measures?|measuring)\s*(\d+\.?\d*)\s*cm/i,
     /invasion\s*(?:is\s*)?(?:limited\s*to|confined\s*to|measuring)\s*(\d+\.?\d*)\s*cm/i,
     /(\d+\.?\d*)\s*cm\s*invasive\s*(?:component|focus|portion|tumor)/i,
+    
+    // BROAD BRIDGE PATTERNS - Capture distant phrasing
+    /invasive\s*focus\b[^.]{0,60}\b(?:measured|measuring)\s*(?:at\s*)?(\d+\.?\d*)\s*cm/i,
+    /invasion\b[^.]{0,60}\bmeasuring\s*(\d+\.?\d*)\s*cm/i,
+    /invasive\s*(?:component|focus)\b[^.]{0,60}\b(\d+\.?\d*)\s*cm/i,
   ];
 
   for (const pattern of invasiveSizePatterns) {
@@ -1441,8 +1471,6 @@ export function parsePathologyReport(reportText: string): ParsedReport {
         // BRIDGE PATTERNS
         /invasion\b[^.]{0,80}\bchest\s*wall/i,
         /(?:underlying|adjacent)\s+chest\s*wall/i,
-        // BRIDGE PATTERNS: Capture "invasion into X and chest wall"
-        /invasion\b[^.]{0,80}\bchest\s*wall/i,
       ],
       keywords: ['chest wall invasion', 'chest wall']
     },
@@ -1502,13 +1530,37 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     },
   };
 
+  // SENTENCE-LEVEL NEGATION PHRASES for bridge pattern safety
+  const sentenceNegationPhrases = [
+    'not identified', 'no evidence of', 'no invasion', 'not seen', 'not present',
+    'not detected', 'negative for', 'absent', 'without invasion', 'free of',
+    'does not invade', 'did not invade', 'no sign of', 'is intact', 'are intact',
+  ];
+
+  const isBridgeSentenceNegatedLocal = (matchStr: string): boolean => {
+    const sentences = text.split(/[.!?]/);
+    for (const sentence of sentences) {
+      if (sentence.includes(matchStr.toLowerCase().substring(0, 20))) {
+        return sentenceNegationPhrases.some(neg => sentence.toLowerCase().includes(neg));
+      }
+    }
+    return false;
+  };
+
   for (const [key, config] of Object.entries(directInvasionPatterns)) {
     let isPositive = false;
     let matchedPattern = false;
     
     for (const pattern of config.patterns) {
-      if (pattern.test(text)) {
+      const match = pattern.exec(text);
+      if (match) {
         matchedPattern = true;
+
+        // For bridge patterns, apply sentence-level negation check
+        const isBridge = pattern.source.includes('[^.]{0,80}');
+        if (isBridge && isBridgeSentenceNegatedLocal(match[0])) {
+          break; // Negated bridge — skip this structure
+        }
         
         // Check if this finding is negated
         let isNegated = false;
@@ -2071,14 +2123,38 @@ ${gateDetail}`;
       /invasion\b[^.]{0,80}\bribs?\b/i,
       /(?:underlying|adjacent)\s+ribs?\b/i,
     ];
+    // Sentence-level negation phrases for bridge safety
+    const bridgeNegPhrases = [
+      'not identified', 'no evidence of', 'no invasion', 'not seen', 'not present',
+      'not detected', 'negative for', 'absent', 'without invasion', 'free of',
+    ];
+    const isBridgeNegatedInSentence = (matchText: string): boolean => {
+      const lowerRaw = rawText.toLowerCase();
+      const sentences = lowerRaw.split(/[.!?]/);
+      for (const sentence of sentences) {
+        if (sentence.includes(matchText.toLowerCase().substring(0, 15))) {
+          return bridgeNegPhrases.some(neg => sentence.includes(neg));
+        }
+      }
+      return false;
+    };
+
     for (const pattern of intercostalPatterns) {
       const isIntercostalPattern = pattern.source.includes('intercostal');
       const negationTerm = isIntercostalPattern ? 'intercostal' : 'rib';
-      if (pattern.test(rawText) && !isNegatedFindingLocal(negationTerm, rawText)) {
-        gate1Triggered = true;
-        gate1Stage = 'pT3';
-        gate1Detail = 'Intercostal muscle/rib invasion → pT3';
-        break;
+      const match = pattern.exec(rawText.toLowerCase());
+      if (match) {
+        // Bridge negation safety
+        const isBridge = pattern.source.includes('[^.]{0,80}');
+        if (isBridge && isBridgeNegatedInSentence(match[0])) {
+          continue;
+        }
+        if (!isNegatedFindingLocal(negationTerm, rawText)) {
+          gate1Triggered = true;
+          gate1Stage = 'pT3';
+          gate1Detail = 'Intercostal muscle/rib invasion → pT3';
+          break;
+        }
       }
     }
   }
