@@ -1,10 +1,12 @@
 
-import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, Heart, FileText, AlertTriangle, HelpCircle, MapPin, Scissors, UserCheck, Code2 } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, Heart, FileText, AlertTriangle, HelpCircle, MapPin, Scissors, UserCheck, Code2, Search } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert, SubmissionAlert, IpsilateralLobeInfo, ClinicalChecklistData, GateExecution } from '@/lib/validationLogic';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert, SubmissionAlert, IpsilateralLobeInfo, ClinicalChecklistData, GateExecution, TriggerEvidence } from '@/lib/validationLogic';
 import { ClinicalChecklist, ChecklistItem } from '@/components/ClinicalChecklist';
 import { PathologySummary } from '@/components/PathologySummary';
 import { ClinicalReasoning } from '@/components/ClinicalReasoning';
@@ -129,6 +131,71 @@ function getICDOMorphology(parsedReport: ParsedReport): { code: string; descript
     return { code: 'M8010/3', descriptor: 'Carcinoma, NOS' };
   }
   return null;
+}
+
+function highlightMatch(sentence: string, phrase: string): string {
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escaped})`, 'gi');
+  return sentence.replace(regex, '<mark class="bg-warning/40 text-foreground rounded px-0.5">$1</mark>');
+}
+
+const GATE_LABELS: Record<string, string> = {
+  'GATE 1': 'GATE 1 — Anatomical Override',
+  'GATE 2': 'GATE 2 — Component Size',
+  'GATE 3': 'GATE 3 — Laterality',
+  'GATE 4': 'GATE 4 — Default Size',
+};
+
+function WhyThisStagePanel({ evidence }: { evidence: TriggerEvidence[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <Card className="border border-muted">
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CollapsibleTrigger asChild>
+          <button className="w-full flex items-center gap-2 p-4 text-left hover:bg-muted/50 transition-colors rounded-t-lg">
+            <Search className="h-4 w-4 text-primary flex-shrink-0" />
+            <span className="text-sm font-semibold text-foreground">Why This Stage?</span>
+            <span className="text-xs text-muted-foreground ml-1">({evidence.length} trigger{evidence.length !== 1 ? 's' : ''})</span>
+            <svg
+              className={`ml-auto h-4 w-4 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-0 pb-4 space-y-3">
+            {evidence.map((item, index) => (
+              <div key={index} className="p-3 rounded-lg bg-muted/50 border border-border space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded">
+                    {GATE_LABELS[item.gate] || item.gate}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground capitalize">{item.ruleType}</span>
+                </div>
+                <div
+                  className="text-xs sm:text-sm font-mono text-foreground leading-relaxed bg-background p-2 rounded border border-border"
+                  dangerouslySetInnerHTML={{ __html: highlightMatch(
+                    item.sentence.replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+                    item.matchedPhrase
+                  )}}
+                />
+                <p className="text-xs text-muted-foreground italic">{item.explanation}</p>
+              </div>
+            ))}
+          </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
+    </Card>
+  );
 }
 
 interface ValidationResultProps {
@@ -419,6 +486,13 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
         calculatedResult={calculatedResult}
         checklist={calculatedResult.clinicalChecklist}
       />
+
+      {/* ============================================================
+          SECTION 4.5: WHY THIS STAGE? — Trigger Evidence Panel
+          ============================================================ */}
+      {parsedReport.triggerEvidence && parsedReport.triggerEvidence.length > 0 && (
+        <WhyThisStagePanel evidence={parsedReport.triggerEvidence} />
+      )}
 
       {/* ============================================================
           SECTION 5: DETAILED FINDINGS (CHECKLIST)
