@@ -4,8 +4,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ValidationResult } from '@/components/ValidationResult';
 import { parsePathologyReport, runValidation, compareStages, getStagingSource } from '@/lib/validationLogic';
-import { STAGING_RULES, GOLDEN_RULES } from '@/lib/stagingRules';
-import { Loader2, FileText, Shield, AlertTriangle, Database, Zap, ChevronDown, HelpCircle } from 'lucide-react';
+import { STAGING_RULES } from '@/lib/stagingRules';
+import { Loader2, FileText, Shield, AlertTriangle, Database, ChevronDown, HelpCircle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   DropdownMenu,
@@ -646,25 +646,6 @@ const Index = () => {
               </CardContent>
             </Card>
 
-            {/* Golden Rules Card - Collapsible on mobile */}
-            <Card className="border-destructive/30 bg-destructive/5">
-              <CardContent className="pt-4 sm:pt-6">
-                <div className="flex gap-2 sm:gap-3">
-                  <Zap className="h-4 w-4 sm:h-5 sm:w-5 text-destructive flex-shrink-0 mt-0.5" />
-                  <div className="text-xs sm:text-sm min-w-0 flex-1">
-                    <p className="font-bold text-destructive mb-2">⚡ Golden Rules</p>
-                    <ul className="space-y-2">
-                      {GOLDEN_RULES.map((rule) => (
-                        <li key={rule.id} className="border-l-2 border-destructive/50 pl-2 sm:pl-3">
-                          <p className="font-semibold text-foreground text-xs sm:text-sm">{rule.name}</p>
-                          <p className="text-muted-foreground text-[10px] sm:text-xs leading-relaxed">{rule.description}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
 
             {/* Info Card - Hidden on mobile, shown on tablet+ */}
             <Card className="border-primary/20 bg-primary/5 hidden sm:block">
