@@ -1916,8 +1916,20 @@ export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean)
       ? `${t_category}(m)` 
       : t_category;
     
-    const stage_group = t_category 
-      ? getStageGroup(t_category, n_category, m_category)
+    // Map pT2 → pT2a for stage grouping (pT2 from atelectasis/pneumonitis floor has no AJCC group entry)
+    const groupingTCategory = (() => {
+      const base = finalTCategory ?? null;
+      if (!base) return null;
+      const hasM = /\(m\)$/i.test(base);
+      const core = base.replace(/\(m\)$/i, '');
+      if (core === 'pT2') return hasM ? 'pT2a(m)' : 'pT2a';
+      return base;
+    })();
+
+    const pT2GroupingApplied = groupingTCategory !== finalTCategory && finalTCategory != null;
+
+    const stage_group = groupingTCategory 
+      ? getStageGroup(groupingTCategory, n_category, m_category)
       : null;
     
     const survival = stage_group ? getSurvivalData(stage_group) : null;
@@ -1949,6 +1961,10 @@ ${gateDetail}`;
     // Add note about (m) suffix if applicable
     if (hasMultiplePrimaries && t_category) {
       gateTable += `\n\n**Note:** (m) suffix added due to multiple primary tumors detected.`;
+    }
+
+    if (pT2GroupingApplied) {
+      gateTable += `\n\n**Note:** pT2 (atelectasis/pneumonitis) is grouped as pT2a for prognostic stage grouping.`;
     }
     
     // Determine clinical verdict and staging basis
