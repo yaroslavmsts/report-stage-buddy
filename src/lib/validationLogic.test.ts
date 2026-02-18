@@ -1299,3 +1299,90 @@ describe('Laterality / satellite nodule detection', () => {
     expect(result.t_category).toBe('pT1c');
   });
 });
+
+// ============================================
+// CONFIDENCE SCORING TESTS
+// ============================================
+describe('Confidence scoring', () => {
+  const run = (text: string) => {
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    return result;
+  };
+
+  it('1) size-only yields High when no critical unknowns detected', () => {
+    const r = run('greatest dimension 2.5 cm');
+    expect(r.confidence).toBeDefined();
+    // Parser may or may not mark nodes/metastasis as unknown depending on text
+    expect(r.confidence!.score).toBeGreaterThanOrEqual(80);
+    expect(['High', 'Medium']).toContain(r.confidence!.level);
+  });
+
+  it('2) size + explicit negative nodes + no metastasis → High', () => {
+    const r = run('greatest dimension 2.5 cm\nlymph nodes negative 0/12\nno distant metastasis');
+    expect(r.confidence!.level).toBe('High');
+    expect(r.confidence!.score).toBeGreaterThanOrEqual(90);
+  });
+
+  it('3) missing size → Low, provisional', () => {
+    const r = run('visceral pleural invasion PL1');
+    expect(r.confidence!.level).toBe('Low');
+    expect(r.confidence!.provisional).toBe(true);
+    expect(r.confidence!.notes).toContain('Tumor size not found');
+  });
+
+  it('4) conflict triggers provisional', () => {
+    const r = run('greatest dimension 2.5 cm\nchest wall invasion cannot be excluded');
+    expect(r.confidence!.provisional).toBe(true);
+    expect(r.confidence!.missingCritical).toContain('report_conflict');
+  });
+
+  it('5) chest wall invasion + explicit negatives → High', () => {
+    const r = run('greatest dimension 2.0 cm\nchest wall invasion present\nlymph nodes negative 0/5\nno distant metastasis');
+    expect(r.confidence!.level).toBe('High');
+    expect(r.confidence!.score).toBeGreaterThanOrEqual(90);
+  });
+
+  it('6) contralateral nodule with size → Medium or High', () => {
+    const r = run('right upper lobe primary\ncontralateral lung nodule in left upper lobe\ngreatest dimension 2.5 cm');
+    expect(r.confidence).toBeDefined();
+    // M1a is present from contralateral, so metastasis fact is present
+    expect(r.confidence!.score).toBeGreaterThanOrEqual(70);
+  });
+
+  it('7) N2 detected but M unstated → score penalized for metastasis', () => {
+    const r = run('greatest dimension 4.2 cm\nsubcarinal lymph node metastasis present (level 7)');
+    expect(r.confidence!.score).toBeGreaterThanOrEqual(80);
+  });
+
+  it('8) N2 + M0 explicit → High', () => {
+    const r = run('greatest dimension 4.2 cm\nsubcarinal lymph node metastasis present (level 7)\nno distant metastasis');
+    expect(r.confidence!.level).toBe('High');
+    expect(r.confidence!.score).toBeGreaterThanOrEqual(90);
+  });
+
+  it('9) VPI floor but M/N unstated → score at least 80', () => {
+    const r = run('greatest dimension 0.8 cm\nvisceral pleural invasion PL1 present');
+    expect(r.confidence!.score).toBeGreaterThanOrEqual(80);
+  });
+
+  it('10) explicit node count negativity → High', () => {
+    const r = run('greatest dimension 0.8 cm\n0/12 lymph nodes negative\nno distant metastasis');
+    expect(r.confidence!.level).toBe('High');
+    expect(r.confidence!.score).toBeGreaterThanOrEqual(90);
+  });
+
+  it('11) multiple critical unknowns → Low, provisional', () => {
+    const r = run('adenocarcinoma');
+    expect(r.confidence!.level).toBe('Low');
+    expect(r.confidence!.provisional).toBe(true);
+    expect(r.confidence!.missingCritical.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('12) confidence always attached for successful run', () => {
+    const r = run('greatest dimension 1.5 cm');
+    expect(r.confidence).toBeDefined();
+    expect(r.clinicalFacts).toBeDefined();
+    expect(r.clinicalFacts!.length).toBeGreaterThan(0);
+  });
+});

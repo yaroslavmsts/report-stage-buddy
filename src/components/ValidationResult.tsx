@@ -1,12 +1,13 @@
 
 import { useState } from 'react';
-import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, Heart, FileText, AlertTriangle, HelpCircle, MapPin, Scissors, UserCheck, Code2, Search } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle, Info, Lightbulb, Activity, Heart, FileText, AlertTriangle, HelpCircle, MapPin, Scissors, UserCheck, Code2, Search, ShieldCheck, ShieldAlert, ShieldQuestion } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert, SubmissionAlert, IpsilateralLobeInfo, ClinicalChecklistData, GateExecution, TriggerEvidence } from '@/lib/validationLogic';
+import { ValidationResult as ValidationResultType, ParsedReport, ConflictInfo, NodalStationAlert, MarginAlert, SubmissionAlert, IpsilateralLobeInfo, ClinicalChecklistData, GateExecution, TriggerEvidence, ClinicalFact, ConfidenceResult } from '@/lib/validationLogic';
+import { Badge } from '@/components/ui/badge';
 import { ClinicalChecklist, ChecklistItem } from '@/components/ClinicalChecklist';
 import { PathologySummary } from '@/components/PathologySummary';
 import { ClinicalReasoning } from '@/components/ClinicalReasoning';
@@ -191,6 +192,107 @@ function WhyThisStagePanel({ evidence }: { evidence: TriggerEvidence[] }) {
                 <p className="text-xs text-muted-foreground italic">{item.explanation}</p>
               </div>
             ))}
+          </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
+    </Card>
+  );
+}
+
+function ConfidencePanel({ confidence, facts }: { confidence: ConfidenceResult; facts: ClinicalFact[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const levelConfig = {
+    High: { icon: ShieldCheck, badgeClass: 'bg-success/20 text-success border-success/30', barClass: 'bg-success' },
+    Medium: { icon: ShieldQuestion, badgeClass: 'bg-warning/20 text-warning border-warning/30', barClass: 'bg-warning' },
+    Low: { icon: ShieldAlert, badgeClass: 'bg-destructive/20 text-destructive border-destructive/30', barClass: 'bg-destructive' },
+  };
+  const config = levelConfig[confidence.level];
+  const LevelIcon = config.icon;
+
+  const missingFacts = facts.filter(f => confidence.missingCritical.includes(f.id));
+
+  return (
+    <Card className="border border-muted">
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CollapsibleTrigger asChild>
+          <button className="w-full flex items-center gap-2 p-4 text-left hover:bg-muted/50 transition-colors rounded-t-lg">
+            <LevelIcon className={`h-4 w-4 flex-shrink-0 ${confidence.level === 'High' ? 'text-success' : confidence.level === 'Medium' ? 'text-warning' : 'text-destructive'}`} />
+            <span className="text-sm font-semibold text-foreground">Confidence</span>
+            <Badge variant="outline" className={`ml-1 text-[10px] ${config.badgeClass}`}>
+              {confidence.level} — {confidence.score}/100
+            </Badge>
+            {confidence.provisional && (
+              <Badge variant="outline" className="ml-1 text-[10px] bg-destructive/10 text-destructive border-destructive/30">
+                Provisional
+              </Badge>
+            )}
+            <svg
+              className={`ml-auto h-4 w-4 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-0 pb-4 space-y-3">
+            {/* Score bar */}
+            <div className="space-y-1">
+              <div className="w-full bg-muted rounded-full h-2">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${config.barClass}`}
+                  style={{ width: `${confidence.score}%` }}
+                />
+              </div>
+            </div>
+
+            {confidence.provisional && (
+              <div className="p-2 rounded bg-destructive/10 border border-destructive/20">
+                <p className="text-xs text-foreground">
+                  <span className="font-semibold text-destructive">Provisional</span> — review missing or conflicting items below before finalizing stage.
+                </p>
+              </div>
+            )}
+
+            {/* Missing items checklist */}
+            {missingFacts.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Missing / Conflicting Items</p>
+                {missingFacts.map((fact) => (
+                  <div key={fact.id} className="flex items-start gap-2 p-2 rounded bg-muted/50 border border-border">
+                    <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${fact.status === 'conflict' ? 'bg-warning' : 'bg-destructive/60'}`} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-foreground">{fact.label}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Status: {fact.status} · Affects: {fact.affects.join(', ')}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* What could change notes */}
+            {confidence.notes.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">What Could Change the Stage?</p>
+                <ul className="space-y-1">
+                  {confidence.notes.map((note, i) => (
+                    <li key={i} className="text-xs text-foreground flex items-start gap-1.5">
+                      <span className="text-warning mt-0.5">•</span>
+                      {note}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </CardContent>
         </CollapsibleContent>
       </Collapsible>
@@ -492,6 +594,16 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
           ============================================================ */}
       {parsedReport.triggerEvidence && parsedReport.triggerEvidence.length > 0 && (
         <WhyThisStagePanel evidence={parsedReport.triggerEvidence} />
+      )}
+
+      {/* ============================================================
+          SECTION 4.6: CONFIDENCE PANEL
+          ============================================================ */}
+      {calculatedResult.confidence && calculatedResult.clinicalFacts && (
+        <ConfidencePanel
+          confidence={calculatedResult.confidence}
+          facts={calculatedResult.clinicalFacts}
+        />
       )}
 
       {/* ============================================================
