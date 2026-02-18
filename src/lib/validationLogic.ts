@@ -120,6 +120,35 @@ export interface ClinicalChecklistData {
   gateExecutions: GateExecution[];
 }
 
+// ============================================
+// CLINICAL FACT & CONFIDENCE MODEL
+// ============================================
+export type FactStatus = 'present' | 'absent' | 'unknown' | 'conflict';
+export type FactConfidence = 'high' | 'medium' | 'low';
+
+export interface EvidenceSpan {
+  sentence: string;
+  matched: string;
+}
+
+export interface ClinicalFact {
+  id: string;
+  label: string;
+  status: FactStatus;
+  confidence: FactConfidence;
+  evidence: EvidenceSpan[];
+  affects: Array<'T' | 'N' | 'M' | 'StageGroup'>;
+  critical: boolean;
+}
+
+export interface ConfidenceResult {
+  score: number;
+  level: 'High' | 'Medium' | 'Low';
+  provisional: boolean;
+  notes: string[];
+  missingCritical: string[];
+}
+
 export interface ValidationResult {
   applicability: 'applicable' | 'not_applicable' | 'indeterminate' | 'outside_scope';
   t_category: string | null;
@@ -133,6 +162,8 @@ export interface ValidationResult {
   reason: string;
   clinicalChecklist?: ClinicalChecklistData;
   gateExecutions?: GateExecution[];
+  clinicalFacts?: ClinicalFact[];
+  confidence?: ConfidenceResult;
 }
 
 export interface ConflictInfo {
@@ -2153,6 +2184,229 @@ function maxT(...cats: Array<string | null | undefined>): string | null {
 // SINGLE-PASS RULE: All detection is done once in parseReport().
 // runValidation() uses pre-detected data from ParsedReport — NO re-detection.
 // ============================================
+// ============================================
+// CLINICAL FACT GENERATION & CONFIDENCE SCORING
+// ============================================
+export function buildClinicalFacts(
+  parsedReport: ParsedReport,
+  resultSoFar: { t_category: string | null; n_category: string; m_category: string }
+): ClinicalFact[] {
+  const { inputs, ipsilateralLobeInfo, pT4Override, hasConflict, conflicts, extractedText } = parsedReport;
+  const facts: ClinicalFact[] = [];
+
+  // 1. Size fact
+  const sizePresent = inputs.measurements_cm.greatest_dimension_cm != null;
+  facts.push({
+    id: 'size',
+    label: 'Tumor size',
+    status: sizePresent ? 'present' : 'unknown',
+    confidence: sizePresent ? 'high' : 'low',
+    evidence: sizePresent && extractedText.measurementFindings.length > 0
+      ? [{ sentence: extractedText.measurementFindings[0], matched: extractedText.measurementFindings[0] }]
+      : [],
+    affects: ['T', 'StageGroup'],
+    critical: true,
+  });
+
+  // 2. VPI fact
+  const hasVPI = inputs.pleural_invasion.has_visceral_pleural_invasion;
+  const plStatus = inputs.pleural_invasion.pl_status;
+  const vpiConflict = hasConflict && conflicts.some(c =>
+    c.invasionKeyword === 'pleural' || c.invasionKeyword === 'pleura' || c.invasionKeyword === 'visceral'
+  );
+  facts.push({
+    id: 'vpi',
+    label: 'Visceral pleural invasion',
+    status: vpiConflict ? 'conflict' : hasVPI ? 'present' : (plStatus === 'PL0' || extractedText.histologyFindings.some(f => f.toLowerCase().includes('pleura') && f.toLowerCase().includes('negative'))) ? 'absent' : 'unknown',
+    confidence: vpiConflict ? 'low' : (hasVPI || plStatus === 'PL0') ? 'high' : 'medium',
+    evidence: hasVPI && extractedText.histologyFindings.filter(f => f.toLowerCase().includes('pleural')).length > 0
+      ? [{ sentence: extractedText.histologyFindings.filter(f => f.toLowerCase().includes('pleural'))[0], matched: plStatus || 'VPI' }]
+      : [],
+    affects: ['T', 'StageGroup'],
+    critical: false,
+  });
+
+  // 3. Chest wall fact
+  const cwPresent = inputs.direct_invasion.chest_wall;
+  facts.push({
+    id: 'chest_wall',
+    label: 'Chest wall invasion',
+    status: cwPresent ? 'present' : 'absent',
+    confidence: cwPresent ? 'high' : 'medium',
+    evidence: [],
+    affects: ['T'],
+    critical: false,
+  });
+
+  // 4. pT4 structure fact
+  facts.push({
+    id: 'pt4_structure',
+    label: 'pT4 critical structure invasion',
+    status: pT4Override.detected ? 'present' : 'absent',
+    confidence: pT4Override.detected ? 'high' : 'medium',
+    evidence: pT4Override.detected
+      ? pT4Override.structures.map(s => ({ sentence: `${s} invasion detected`, matched: s }))
+      : [],
+    affects: ['T', 'StageGroup'],
+    critical: false,
+  });
+
+  // 5. Hilar fat fact
+  facts.push({
+    id: 'hilar_fat',
+    label: 'Hilar fat invasion',
+    status: inputs.direct_invasion.hilar_fat ? 'present' : 'absent',
+    confidence: inputs.direct_invasion.hilar_fat ? 'high' : 'medium',
+    evidence: [],
+    affects: ['T'],
+    critical: false,
+  });
+
+  // 6. Atelectasis/pneumonitis fact
+  const hasAtelectasis = inputs.atelectasis.has_total_lung_atelectasis || inputs.atelectasis.has_total_lung_pneumonitis;
+  facts.push({
+    id: 'atelectasis',
+    label: 'Total lung atelectasis/pneumonitis',
+    status: hasAtelectasis ? 'present' : 'absent',
+    confidence: hasAtelectasis ? 'high' : 'medium',
+    evidence: [],
+    affects: ['T'],
+    critical: false,
+  });
+
+  // 7. Laterality fact
+  const hasLaterality = ipsilateralLobeInfo.forcesM1a || ipsilateralLobeInfo.forcesT4 || ipsilateralLobeInfo.forcesT3;
+  facts.push({
+    id: 'laterality',
+    label: 'Separate tumor nodules (laterality)',
+    status: hasLaterality ? 'present' : 'absent',
+    confidence: hasLaterality ? 'high' : 'medium',
+    evidence: hasLaterality && ipsilateralLobeInfo.message
+      ? [{ sentence: ipsilateralLobeInfo.message, matched: 'laterality' }]
+      : [],
+    affects: ipsilateralLobeInfo.forcesM1a ? ['M', 'StageGroup'] : ['T', 'StageGroup'],
+    critical: false,
+  });
+
+  // 8. Nodes fact
+  const nCat = resultSoFar.n_category;
+  const nodesPositive = /pN[1-3]/i.test(nCat);
+  const hasNodeEvidence = inputs.nodal_stations.node_count_provided || inputs.nodal_stations.stations_mentioned.length > 0;
+  const nodeTextPresent = extractedText.lymphNodeFindings.length > 0;
+  const nodesUnknown = !nodesPositive && nCat === 'pN0' && !hasNodeEvidence && !nodeTextPresent;
+  facts.push({
+    id: 'nodes',
+    label: 'Nodal status (pN)',
+    status: nodesPositive ? 'present' : nodesUnknown ? 'unknown' : 'absent',
+    confidence: nodesPositive ? 'high' : nodesUnknown ? 'low' : (hasNodeEvidence ? 'high' : 'medium'),
+    evidence: extractedText.lymphNodeFindings.length > 0
+      ? [{ sentence: extractedText.lymphNodeFindings[0], matched: nCat }]
+      : [],
+    affects: ['N', 'StageGroup'],
+    critical: true,
+  });
+
+  // 9. Metastasis fact
+  const mCat = resultSoFar.m_category;
+  const metPresent = /pM1/i.test(mCat);
+  const metTextPresent = extractedText.metastasisFindings.length > 0;
+  const metUnknown = !metPresent && mCat === 'pM0' && !metTextPresent;
+  facts.push({
+    id: 'metastasis',
+    label: 'Distant metastasis (pM)',
+    status: metPresent ? 'present' : metUnknown ? 'unknown' : 'absent',
+    confidence: metPresent ? 'high' : metUnknown ? 'low' : (metTextPresent ? 'high' : 'medium'),
+    evidence: extractedText.metastasisFindings.length > 0
+      ? [{ sentence: extractedText.metastasisFindings[0], matched: mCat }]
+      : [],
+    affects: ['M', 'StageGroup'],
+    critical: true,
+  });
+
+  // 10. Report conflict fact
+  if (hasConflict) {
+    facts.push({
+      id: 'report_conflict',
+      label: 'Report contains conflicting language',
+      status: 'conflict',
+      confidence: 'low',
+      evidence: conflicts.slice(0, 2).map(c => ({ sentence: c.sentence, matched: c.negationKeyword })),
+      affects: ['T', 'N', 'M', 'StageGroup'],
+      critical: true,
+    });
+  }
+
+  return facts;
+}
+
+export function computeConfidence(
+  facts: ClinicalFact[],
+  parsedReport: ParsedReport
+): ConfidenceResult {
+  let score = 100;
+  const notes: string[] = [];
+  const missingCritical: string[] = [];
+
+  // Size penalty
+  if (parsedReport.inputs.measurements_cm.greatest_dimension_cm == null) {
+    score -= 40;
+    notes.push('Tumor size not found');
+  }
+
+  for (const fact of facts) {
+    if (fact.critical) {
+      if (fact.status === 'unknown') {
+        score -= 10;
+        missingCritical.push(fact.id);
+      } else if (fact.status === 'conflict') {
+        score -= 20;
+        missingCritical.push(fact.id);
+      }
+    }
+    if (fact.status === 'present' && fact.confidence === 'low') {
+      score -= 5;
+    }
+  }
+
+  score = Math.max(0, Math.min(100, score));
+
+  const level: 'High' | 'Medium' | 'Low' = score >= 80 ? 'High' : score >= 55 ? 'Medium' : 'Low';
+  const provisional = level === 'Low' || facts.some(f => f.critical && f.status === 'conflict') || missingCritical.length >= 2;
+
+  // Generate "what could change" notes from missing critical
+  const changeNotes: string[] = [];
+  for (const id of missingCritical) {
+    switch (id) {
+      case 'size':
+        changeNotes.push('Tumor size could determine T-category');
+        break;
+      case 'nodes':
+        changeNotes.push('Nodal status could change stage group');
+        break;
+      case 'metastasis':
+        changeNotes.push('Metastasis could set Stage IV');
+        break;
+      case 'vpi':
+        changeNotes.push('Pleural invasion could floor to T2a');
+        break;
+      case 'laterality':
+        changeNotes.push('Separate tumor nodules/laterality could upstage (T3/T4) or set M1a');
+        break;
+      case 'report_conflict':
+        changeNotes.push('Conflicting language may affect invasion-based staging');
+        break;
+    }
+  }
+
+  return {
+    score,
+    level,
+    provisional,
+    notes: [...notes, ...changeNotes],
+    missingCritical,
+  };
+}
+
 export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean): ValidationResult {
   const { inputs, rawText, ipsilateralLobeInfo, pT4Override, multiplePrimaryTumors } = parsedReport;
   const effectiveHasConflict = hasConflict ?? parsedReport.hasConflict;
@@ -2346,6 +2600,14 @@ ${gateDetail}`;
       gateExecutions: localGateExecutions,
     };
     
+    // Build clinical facts and confidence
+    const clinicalFacts = buildClinicalFacts(parsedReport, {
+      t_category: finalTCategory,
+      n_category,
+      m_category,
+    });
+    const confidence = computeConfidence(clinicalFacts, parsedReport);
+
     return {
       applicability,
       t_category: finalTCategory,
@@ -2359,6 +2621,8 @@ ${gateDetail}`;
       reason: gateTable,
       clinicalChecklist,
       gateExecutions: localGateExecutions,
+      clinicalFacts,
+      confidence,
     };
   };
 
