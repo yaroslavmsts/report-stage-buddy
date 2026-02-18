@@ -1255,3 +1255,47 @@ describe('Master Hierarchy Compliance', () => {
     });
   });
 });
+
+describe('Laterality / satellite nodule detection', () => {
+  it('"same lobe nodule" triggers pT3', () => {
+    const text = 'Right upper lobe primary. Same lobe nodule. Greatest dimension 2.5 cm.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).toBe('pT3');
+  });
+
+  it('"satellite nodule in RUL" triggers pT3 when primary is RUL', () => {
+    const text = 'Right upper lobe primary. Satellite nodule in RUL. Greatest dimension 2.5 cm.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).toBe('pT3');
+  });
+
+  it('negation suppresses laterality: "no additional nodules"', () => {
+    const text = 'Right upper lobe primary. No additional nodules identified. Greatest dimension 2.5 cm.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).toBe('pT1c');
+  });
+
+  it('"satellite lesion" triggers pT3', () => {
+    const text = 'Left upper lobe primary. Satellite lesion. Greatest dimension 1.0 cm.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).toBe('pT3');
+  });
+
+  it('"second focus in same lobe" triggers pT3', () => {
+    const text = 'Right lower lobe primary. Second focus in same lobe. Greatest dimension 3.0 cm.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).toBe('pT3');
+  });
+
+  it('"no satellite nodules" does NOT trigger pT3', () => {
+    const text = 'Right upper lobe primary. No satellite nodules. Greatest dimension 2.5 cm.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).toBe('pT1c');
+  });
+});

@@ -868,6 +868,8 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
     /different\s*ipsilateral\s*lobe/gi,
     /separate\s*(?:tumor\s*)?nodule\s*(?:in|within)\s*(?:a\s*)?different\s*lobe\s*(?:of\s*)?(?:the\s*)?(?:same|ipsilateral)\s*lung/gi,
     /(?:separate|additional)\s*(?:tumor\s*)?nodule\s*of\s*(?:the\s*)?same\s*histolog(?:y|ic)\s*type\s*(?:in|within)\s*(?:a\s*)?different\s*(?:ipsilateral\s*)?lobe/gi,
+    /(?:nodule|tumor|mass|lesion|focus)\s*(?:in|within)\s*(?:a\s*)?(?:another|different|separate)\s*(?:ipsilateral\s*)?lobe/gi,
+    /(?:another|different)\s*lobe\s*(?:nodule|tumor|mass|lesion|focus)/gi,
   ];
   
   for (const pattern of differentIpsilateralPhrases) {
@@ -901,17 +903,18 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
   ];
 
   const sameLobePatterns: RegExp[] = [
-    // Existing patterns
-    /(?:separate|additional|satellite|secondary)\s*(?:tumor\s*)?(?:nodule|mass|lesion)\s*(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
-    /(?:same\s*lobe)\s*(?:satellite|separate|additional)\s*(?:nodule|tumor|mass|lesion)/gi,
-    /(?:satellite|separate)\s*(?:nodule|tumor)\s*(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
-    /satellite\s*nodule/gi,
-    // New synonym patterns
-    /same\s*lobe\s*(?:nodule|tumor|mass|lesion)/gi,
-    /(?:second|additional)\s*(?:tumor\s*)?(?:nodule|mass|lesion)\s*(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
-    /(?:in|within)\s*(?:the\s*)?same\s*lobe\b.{0,30}\b(?:nodule|tumor\s*nodule|satellite|lesion|mass)/gi,
-    /(?:nodule|tumor\s*nodule|satellite|lesion|mass)\b.{0,30}\b(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
+    // Core patterns
+    /(?:separate|additional|satellite|secondary)\s*(?:tumor\s*)?(?:nodule|mass|lesion|focus)\s*(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
+    /(?:same\s*lobe)\s*(?:satellite|separate|additional)\s*(?:nodule|tumor|mass|lesion|focus)/gi,
+    /(?:satellite|separate)\s*(?:nodule|tumor|focus)\s*(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
+    /satellite\s*(?:nodule|lesion|focus)/gi,
+    /same\s*lobe\s*(?:nodule|tumor|mass|lesion|focus)/gi,
+    /(?:second|additional|another)\s*(?:tumor\s*)?(?:nodule|mass|lesion|focus)\s*(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
+    /(?:in|within)\s*(?:the\s*)?same\s*lobe\b.{0,30}\b(?:nodule|tumor\s*nodule|satellite|lesion|mass|focus)/gi,
+    /(?:nodule|tumor\s*nodule|satellite|lesion|mass|focus)\b.{0,30}\b(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
     /(?:tumor\s*nodule)\s*(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
+    // "second focus" / "additional focus" / "another nodule" standalone with same-lobe context
+    /(?:second|additional|another)\s*(?:tumor\s*)?(?:focus)\s*(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
   ];
 
   const isNoduleMatchNegated = (matchIndex: number): boolean => {
@@ -932,12 +935,17 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
     if (hasSameLobeNodule) break;
   }
 
-  // Additional heuristic: if primary lobe is known and a second/additional nodule
+  // "multifocal" + "same lobe" co-occurrence check
+  if (!hasSameLobeNodule && /multifocal/i.test(text) && /same\s*lobe/i.test(text)) {
+    hasSameLobeNodule = true;
+  }
+
+  // Additional heuristic: if primary lobe is known and a second/additional nodule/focus
   // mentions the SAME lobe label, treat as same-lobe nodule
   if (!hasSameLobeNodule && primaryLobe) {
     const lobeLabel = (LOBE_ABBREVIATIONS[primaryLobe] || primaryLobe).toLowerCase();
     const secondNoduleInLobe = new RegExp(
-      `(?:second|additional|another|separate)\\s*(?:tumor\\s*)?(?:nodule|mass|lesion)\\b.{0,60}\\b${lobeLabel.replace(/\s+/g, '\\s*')}`,
+      `(?:second|additional|another|separate)\\s*(?:tumor\\s*)?(?:nodule|mass|lesion|focus)\\b.{0,60}\\b${lobeLabel.replace(/\s+/g, '\\s*')}`,
       'gi'
     );
     secondNoduleInLobe.lastIndex = 0;
@@ -948,20 +956,56 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
         break;
       }
     }
+    // Also check reverse: lobe label then nodule/focus
+    if (!hasSameLobeNodule) {
+      const lobeThenNodule = new RegExp(
+        `${lobeLabel.replace(/\s+/g, '\\s*')}\\b.{0,60}\\b(?:second|additional|another|separate)\\s*(?:tumor\\s*)?(?:nodule|mass|lesion|focus)`,
+        'gi'
+      );
+      let m3: RegExpExecArray | null;
+      while ((m3 = lobeThenNodule.exec(text)) !== null) {
+        if (!isNoduleMatchNegated(m3.index)) {
+          hasSameLobeNodule = true;
+          break;
+        }
+      }
+    }
   }
 
   // Check for contralateral nodule patterns (pM1a)
   const contralateralPatterns = [
-    /(?:contralateral|opposite)\s*(?:lung\s*)?(?:nodule|tumor|mass|lesion)/gi,
-    /(?:nodule|tumor|mass|lesion)\s*(?:in|within)\s*(?:the\s*)?(?:contralateral|opposite)\s*(?:lung|lobe)/gi,
-    /(?:separate|additional)\s*(?:nodule|tumor)\s*(?:in|within)\s*(?:the\s*)?(?:contralateral|opposite)\s*lung/gi,
+    /(?:contralateral|opposite)\s*(?:lung\s*)?(?:nodule|tumor|mass|lesion|focus)/gi,
+    /(?:nodule|tumor|mass|lesion|focus)\s*(?:in|within)\s*(?:the\s*)?(?:contralateral|opposite)\s*(?:lung|lobe)/gi,
+    /(?:separate|additional)\s*(?:nodule|tumor|focus)\s*(?:in|within)\s*(?:the\s*)?(?:contralateral|opposite)\s*lung/gi,
+    /(?:other|opposite)\s*lung\s*(?:nodule|tumor|mass|lesion|focus)/gi,
   ];
   
   for (const pattern of contralateralPatterns) {
     pattern.lastIndex = 0;
-    if (pattern.test(text)) {
-      hasContralateralNodule = true;
-      break;
+    let cm: RegExpExecArray | null;
+    while ((cm = pattern.exec(text)) !== null) {
+      if (!isNoduleMatchNegated(cm.index)) {
+        hasContralateralNodule = true;
+        break;
+      }
+    }
+    if (hasContralateralNodule) break;
+  }
+
+  // Contralateral by lung-side inference: e.g. primary in right lung, nodule mentioned with "left lung"
+  if (!hasContralateralNodule && primaryLobe) {
+    const primaryLung = LOBE_TO_LUNG_MAP[primaryLobe];
+    const oppositeSide = primaryLung === 'Right' ? 'left' : 'right';
+    const oppositeLungNodule = new RegExp(
+      `(?:nodule|tumor|mass|lesion|focus|satellite)\\b.{0,40}\\b${oppositeSide}\\s*lung|${oppositeSide}\\s*lung\\b.{0,40}\\b(?:nodule|tumor|mass|lesion|focus|satellite)`,
+      'gi'
+    );
+    let cm2: RegExpExecArray | null;
+    while ((cm2 = oppositeLungNodule.exec(text)) !== null) {
+      if (!isNoduleMatchNegated(cm2.index)) {
+        hasContralateralNodule = true;
+        break;
+      }
     }
   }
 
