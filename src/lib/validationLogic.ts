@@ -893,18 +893,60 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
   }
 
   // Check for same lobe nodule patterns (pT3)
-  const sameLobePatterns = [
+  // Negation window: if any negation phrase appears within 40 chars before the match, skip it
+  const NODULE_NEGATION_PHRASES = [
+    'no ', 'not ', 'absent', 'negative', 'without', 'none', 'no evidence',
+    'not identified', 'not seen', 'not present', 'no additional', 'no satellite',
+    'no separate', 'no second', 'no nodule',
+  ];
+
+  const sameLobePatterns: RegExp[] = [
+    // Existing patterns
     /(?:separate|additional|satellite|secondary)\s*(?:tumor\s*)?(?:nodule|mass|lesion)\s*(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
     /(?:same\s*lobe)\s*(?:satellite|separate|additional)\s*(?:nodule|tumor|mass|lesion)/gi,
     /(?:satellite|separate)\s*(?:nodule|tumor)\s*(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
     /satellite\s*nodule/gi,
+    // New synonym patterns
+    /same\s*lobe\s*(?:nodule|tumor|mass|lesion)/gi,
+    /(?:second|additional)\s*(?:tumor\s*)?(?:nodule|mass|lesion)\s*(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
+    /(?:in|within)\s*(?:the\s*)?same\s*lobe\b.{0,30}\b(?:nodule|tumor\s*nodule|satellite|lesion|mass)/gi,
+    /(?:nodule|tumor\s*nodule|satellite|lesion|mass)\b.{0,30}\b(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
+    /(?:tumor\s*nodule)\s*(?:in|within)\s*(?:the\s*)?same\s*lobe/gi,
   ];
-  
+
+  const isNoduleMatchNegated = (matchIndex: number): boolean => {
+    const windowStart = Math.max(0, matchIndex - 40);
+    const window = text.substring(windowStart, matchIndex);
+    return NODULE_NEGATION_PHRASES.some(neg => window.includes(neg));
+  };
+
   for (const pattern of sameLobePatterns) {
     pattern.lastIndex = 0;
-    if (pattern.test(text)) {
-      hasSameLobeNodule = true;
-      break;
+    let m: RegExpExecArray | null;
+    while ((m = pattern.exec(text)) !== null) {
+      if (!isNoduleMatchNegated(m.index)) {
+        hasSameLobeNodule = true;
+        break;
+      }
+    }
+    if (hasSameLobeNodule) break;
+  }
+
+  // Additional heuristic: if primary lobe is known and a second/additional nodule
+  // mentions the SAME lobe label, treat as same-lobe nodule
+  if (!hasSameLobeNodule && primaryLobe) {
+    const lobeLabel = (LOBE_ABBREVIATIONS[primaryLobe] || primaryLobe).toLowerCase();
+    const secondNoduleInLobe = new RegExp(
+      `(?:second|additional|another|separate)\\s*(?:tumor\\s*)?(?:nodule|mass|lesion)\\b.{0,60}\\b${lobeLabel.replace(/\s+/g, '\\s*')}`,
+      'gi'
+    );
+    secondNoduleInLobe.lastIndex = 0;
+    let m2: RegExpExecArray | null;
+    while ((m2 = secondNoduleInLobe.exec(text)) !== null) {
+      if (!isNoduleMatchNegated(m2.index)) {
+        hasSameLobeNodule = true;
+        break;
+      }
     }
   }
 
