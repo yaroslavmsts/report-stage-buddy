@@ -175,6 +175,16 @@ export interface IpsilateralLobeInfo {
   message: string | null;
 }
 
+export interface TriggerEvidence {
+  gate: 'GATE 1' | 'GATE 2' | 'GATE 3' | 'GATE 4';
+  ruleType: 'anatomical' | 'laterality' | 'component' | 'floor';
+  matchedPhrase: string;
+  sentence: string;
+  startIndex: number;
+  endIndex: number;
+  explanation: string;
+}
+
 export interface ParsedReport {
   inputs: ValidationInputs;
   extractedText: {
@@ -198,6 +208,7 @@ export interface ParsedReport {
   invasiveSizeMissing: boolean;
   submissionAlerts: SubmissionAlert[];
   ipsilateralLobeInfo: IpsilateralLobeInfo;
+  triggerEvidence: TriggerEvidence[];
 }
 
 // ============================================
@@ -1847,6 +1858,236 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   // ============================================
   const ipsilateralLobeInfo = detectIpsilateralLobeNodules(reportText);
 
+  // ============================================
+  // BUILD TRIGGER EVIDENCE
+  // ============================================
+  const triggerEvidence: TriggerEvidence[] = [];
+
+  // Helper: find the sentence containing a phrase and its indices
+  const findSentenceForPhrase = (phrase: string, rawText: string): { sentence: string; startIndex: number; endIndex: number } | null => {
+    const lowerRaw = rawText.toLowerCase();
+    const lowerPhrase = phrase.toLowerCase();
+    const idx = lowerRaw.indexOf(lowerPhrase);
+    if (idx === -1) return null;
+    // Find sentence boundaries
+    const before = rawText.substring(0, idx);
+    const after = rawText.substring(idx);
+    const sentStart = Math.max(before.lastIndexOf('.') + 1, before.lastIndexOf('\n') + 1, 0);
+    const relEnd = after.search(/[.\n]/);
+    const sentEnd = relEnd === -1 ? rawText.length : idx + relEnd;
+    const sentence = rawText.substring(sentStart, sentEnd).trim();
+    return { sentence, startIndex: idx, endIndex: idx + phrase.length };
+  };
+
+  // GATE 1: pT4 anatomical overrides
+  if (pT4Structures.detected) {
+    for (const structure of pT4Structures.structures) {
+      const searchTerm = structure.toLowerCase();
+      const evidence = findSentenceForPhrase(searchTerm, reportText);
+      if (evidence) {
+        triggerEvidence.push({
+          gate: 'GATE 1',
+          ruleType: 'anatomical',
+          matchedPhrase: reportText.substring(evidence.startIndex, evidence.endIndex),
+          sentence: evidence.sentence,
+          startIndex: evidence.startIndex,
+          endIndex: evidence.endIndex,
+          explanation: `${structure} invasion forces pT4 per AJCC 8th Edition.`,
+        });
+      }
+    }
+  }
+
+  // GATE 1: Direct invasion (pT3 structures)
+  const directInvasionLabels: Record<string, string> = {
+    chest_wall: 'Chest wall',
+    phrenic_nerve: 'Phrenic nerve',
+    pericardium: 'Pericardium',
+    main_bronchus: 'Main bronchus',
+    diaphragm: 'Diaphragm',
+    hilar_fat: 'Hilar fat/soft tissue',
+  };
+  for (const [key, label] of Object.entries(directInvasionLabels)) {
+    if (inputs.direct_invasion[key as keyof typeof inputs.direct_invasion]) {
+      const searchTerms = [label.toLowerCase(), key.replace(/_/g, ' ')];
+      for (const term of searchTerms) {
+        const evidence = findSentenceForPhrase(term, reportText);
+        if (evidence) {
+          const stage = (key === 'hilar_fat') ? 'pT2a' : 'pT3';
+          triggerEvidence.push({
+            gate: 'GATE 1',
+            ruleType: 'anatomical',
+            matchedPhrase: reportText.substring(evidence.startIndex, evidence.endIndex),
+            sentence: evidence.sentence,
+            startIndex: evidence.startIndex,
+            endIndex: evidence.endIndex,
+            explanation: `${label} invasion forces ${stage} per AJCC 8th Edition.`,
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  // GATE 1: Visceral pleural invasion
+  if (inputs.pleural_invasion.has_visceral_pleural_invasion) {
+    const plTerms = ['visceral pleural invasion', 'pleural invasion', inputs.pleural_invasion.pl_status?.toLowerCase()].filter(Boolean) as string[];
+    for (const term of plTerms) {
+      const evidence = findSentenceForPhrase(term, reportText);
+      if (evidence) {
+        triggerEvidence.push({
+          gate: 'GATE 1',
+          ruleType: 'anatomical',
+          matchedPhrase: reportText.substring(evidence.startIndex, evidence.endIndex),
+          sentence: evidence.sentence,
+          startIndex: evidence.startIndex,
+          endIndex: evidence.endIndex,
+          explanation: `Visceral pleural invasion (${inputs.pleural_invasion.pl_status || 'PL1'}) sets pT2a floor per AJCC 8th Edition.`,
+        });
+        break;
+      }
+    }
+  }
+
+  // GATE 1 FLOOR: Atelectasis/Pneumonitis
+  if (inputs.atelectasis.has_total_lung_atelectasis) {
+    const evidence = findSentenceForPhrase('atelectasis', reportText);
+    if (evidence) {
+      triggerEvidence.push({
+        gate: 'GATE 1',
+        ruleType: 'floor',
+        matchedPhrase: reportText.substring(evidence.startIndex, evidence.endIndex),
+        sentence: evidence.sentence,
+        startIndex: evidence.startIndex,
+        endIndex: evidence.endIndex,
+        explanation: 'Total lung atelectasis sets pT2 floor per AJCC 8th Edition Golden Rule.',
+      });
+    }
+  }
+  if (inputs.atelectasis.has_total_lung_pneumonitis) {
+    const evidence = findSentenceForPhrase('pneumonitis', reportText);
+    if (evidence) {
+      triggerEvidence.push({
+        gate: 'GATE 1',
+        ruleType: 'floor',
+        matchedPhrase: reportText.substring(evidence.startIndex, evidence.endIndex),
+        sentence: evidence.sentence,
+        startIndex: evidence.startIndex,
+        endIndex: evidence.endIndex,
+        explanation: 'Total lung pneumonitis sets pT2 floor per AJCC 8th Edition Golden Rule.',
+      });
+    }
+  }
+
+  // GATE 2: Invasive component size
+  if (inputs.measurements_cm.invasive_size_cm !== null) {
+    const invasiveTerms = ['invasive size', 'invasive component', 'focus of invasion', 'invasive focus'];
+    for (const term of invasiveTerms) {
+      const evidence = findSentenceForPhrase(term, reportText);
+      if (evidence) {
+        triggerEvidence.push({
+          gate: 'GATE 2',
+          ruleType: 'component',
+          matchedPhrase: reportText.substring(evidence.startIndex, evidence.endIndex),
+          sentence: evidence.sentence,
+          startIndex: evidence.startIndex,
+          endIndex: evidence.endIndex,
+          explanation: `Invasive component size (${inputs.measurements_cm.invasive_size_cm} cm) used per CAP Note A for adenocarcinoma with lepidic component.`,
+        });
+        break;
+      }
+    }
+  }
+
+  // GATE 3: Laterality
+  if (ipsilateralLobeInfo.forcesT3) {
+    const lateralityTerms = ['same lobe', 'satellite nodule', 'satellite lesion', 'additional nodule', 'second nodule', 'separate nodule', 'same lobe nodule', 'satellite focus', 'second focus'];
+    for (const term of lateralityTerms) {
+      const evidence = findSentenceForPhrase(term, reportText);
+      if (evidence) {
+        triggerEvidence.push({
+          gate: 'GATE 3',
+          ruleType: 'laterality',
+          matchedPhrase: reportText.substring(evidence.startIndex, evidence.endIndex),
+          sentence: evidence.sentence,
+          startIndex: evidence.startIndex,
+          endIndex: evidence.endIndex,
+          explanation: 'Separate tumor nodule in same lobe forces pT3 per AJCC 8th Edition.',
+        });
+        break;
+      }
+    }
+  }
+  if (ipsilateralLobeInfo.forcesT4) {
+    const lateralityTerms = ['different ipsilateral lobe', 'different lobe', 'another lobe'];
+    let found = false;
+    for (const term of lateralityTerms) {
+      const evidence = findSentenceForPhrase(term, reportText);
+      if (evidence) {
+        triggerEvidence.push({
+          gate: 'GATE 3',
+          ruleType: 'laterality',
+          matchedPhrase: reportText.substring(evidence.startIndex, evidence.endIndex),
+          sentence: evidence.sentence,
+          startIndex: evidence.startIndex,
+          endIndex: evidence.endIndex,
+          explanation: `Separate tumor nodule in different ipsilateral lobe (${ipsilateralLobeInfo.primaryLobe} → ${ipsilateralLobeInfo.noduleLobe}) forces pT4 per AJCC 8th Edition.`,
+        });
+        found = true;
+        break;
+      }
+    }
+    // Fallback: use nodule lobe label
+    if (!found && ipsilateralLobeInfo.noduleLobe) {
+      const evidence = findSentenceForPhrase(ipsilateralLobeInfo.noduleLobe.toLowerCase(), reportText);
+      if (evidence) {
+        triggerEvidence.push({
+          gate: 'GATE 3',
+          ruleType: 'laterality',
+          matchedPhrase: reportText.substring(evidence.startIndex, evidence.endIndex),
+          sentence: evidence.sentence,
+          startIndex: evidence.startIndex,
+          endIndex: evidence.endIndex,
+          explanation: `Separate tumor nodule in different ipsilateral lobe (${ipsilateralLobeInfo.primaryLobe} → ${ipsilateralLobeInfo.noduleLobe}) forces pT4 per AJCC 8th Edition.`,
+        });
+      }
+    }
+  }
+  if (ipsilateralLobeInfo.forcesM1a) {
+    const lateralityTerms = ['contralateral', 'opposite lung', 'other lung'];
+    let found = false;
+    for (const term of lateralityTerms) {
+      const evidence = findSentenceForPhrase(term, reportText);
+      if (evidence) {
+        triggerEvidence.push({
+          gate: 'GATE 3',
+          ruleType: 'laterality',
+          matchedPhrase: reportText.substring(evidence.startIndex, evidence.endIndex),
+          sentence: evidence.sentence,
+          startIndex: evidence.startIndex,
+          endIndex: evidence.endIndex,
+          explanation: 'Contralateral lung nodule forces pM1a per AJCC 8th Edition.',
+        });
+        found = true;
+        break;
+      }
+    }
+    if (!found && ipsilateralLobeInfo.noduleLobe) {
+      const evidence = findSentenceForPhrase(ipsilateralLobeInfo.noduleLobe.toLowerCase(), reportText);
+      if (evidence) {
+        triggerEvidence.push({
+          gate: 'GATE 3',
+          ruleType: 'laterality',
+          matchedPhrase: reportText.substring(evidence.startIndex, evidence.endIndex),
+          sentence: evidence.sentence,
+          startIndex: evidence.startIndex,
+          endIndex: evidence.endIndex,
+          explanation: 'Contralateral lung nodule forces pM1a per AJCC 8th Edition.',
+        });
+      }
+    }
+  }
+
   return { 
     inputs, 
     extractedText, 
@@ -1863,6 +2104,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     invasiveSizeMissing,
     submissionAlerts,
     ipsilateralLobeInfo,
+    triggerEvidence,
   };
 }
 
