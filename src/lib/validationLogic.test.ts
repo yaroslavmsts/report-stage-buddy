@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectInvasionConflicts, detectAmbiguityPhrases, detectPT4Structures, detectNodalStationAlerts, detectMarginStatus, detectMultiplePrimaryTumors, parsePathologyReport, runValidation, ConflictInfo, NodalStationAlert, MarginAlert } from './validationLogic';
+import { detectInvasionConflicts, detectAmbiguityPhrases, detectPT4Structures, detectNodalStationAlerts, detectMarginStatus, detectMultiplePrimaryTumors, parsePathologyReport, runValidation, isNegated, ConflictInfo, NodalStationAlert, MarginAlert } from './validationLogic';
 
 describe('detectInvasionConflicts', () => {
   describe('should NOT detect conflict (standard negation patterns - CONFIRMED NEGATIVE)', () => {
