@@ -332,6 +332,44 @@ const BRIDGE_NEGATION_PHRASES = [
   'does not invade', 'did not invade', 'no sign of', 'is intact', 'are intact',
 ];
 
+// NEGATION PHRASES for proximity-based negation detection (multi-word first, then single-word)
+const NEGATION_WINDOW_PHRASES = [
+  'no evidence of', 'no sign of', 'negative for', 'absence of', 'free of',
+  'does not', 'did not', 'do not',
+];
+const NEGATION_WINDOW_WORDS = [
+  'no', 'not', 'without', 'denies', 'absent', 'negative', 'intact', 'unremarkable',
+];
+
+/**
+ * Returns true if the match at `matchIndex` in `text` is preceded by a negation term
+ * within a window of ~5 words (roughly 60 chars) before the match start.
+ */
+export function isNegated(text: string, matchIndex: number): boolean {
+  const windowStart = Math.max(0, matchIndex - 60);
+  const precedingText = text.substring(windowStart, matchIndex).toLowerCase();
+
+  // Check multi-word negation phrases (substring match is safe for these)
+  for (const phrase of NEGATION_WINDOW_PHRASES) {
+    if (precedingText.includes(phrase)) {
+      return true;
+    }
+  }
+
+  // Check single-word negation terms with word-boundary safety
+  // Split preceding text into words and check the last ~5 words
+  const words = precedingText.trim().split(/\s+/);
+  const lastWords = words.slice(-5);
+  for (const word of lastWords) {
+    const cleaned = word.replace(/[^a-z]/g, '');
+    if (NEGATION_WINDOW_WORDS.includes(cleaned)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Checks if a sentence contains a standard negation phrase that confirms negative status
  * These are clear, unambiguous negations that should NOT trigger conflict warnings
@@ -646,10 +684,13 @@ export function detectPT4Structures(
         if (isBridge && isBridgeSentenceNegated(match[0])) {
           continue; // Negated bridge — skip
         }
-        // Check if negated via standard negation
-        if (!isNegatedFinding(key.replace(/_/g, ' '), text)) {
-          detectedStructures.push(config.display);
-          break;
+        // Check if negated via match-index-based negation
+        if (!isNegated(text, match.index)) {
+          // Also check via legacy isNegatedFinding for backward compat
+          if (!isNegatedFinding(key.replace(/_/g, ' '), text)) {
+            detectedStructures.push(config.display);
+            break;
+          }
         }
       }
     }

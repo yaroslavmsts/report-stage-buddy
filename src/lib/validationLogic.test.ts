@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectInvasionConflicts, detectAmbiguityPhrases, detectPT4Structures, detectNodalStationAlerts, detectMarginStatus, detectMultiplePrimaryTumors, parsePathologyReport, runValidation, ConflictInfo, NodalStationAlert, MarginAlert } from './validationLogic';
+import { detectInvasionConflicts, detectAmbiguityPhrases, detectPT4Structures, detectNodalStationAlerts, detectMarginStatus, detectMultiplePrimaryTumors, parsePathologyReport, runValidation, isNegated, ConflictInfo, NodalStationAlert, MarginAlert } from './validationLogic';
 
 describe('detectInvasionConflicts', () => {
   describe('should NOT detect conflict (standard negation patterns - CONFIRMED NEGATIVE)', () => {
@@ -1384,5 +1384,83 @@ describe('Confidence scoring', () => {
     expect(r.confidence).toBeDefined();
     expect(r.clinicalFacts).toBeDefined();
     expect(r.clinicalFacts!.length).toBeGreaterThan(0);
+  });
+});
+
+// ============================================
+// NEGATION-AWARE EXTRACTION TESTS
+// ============================================
+describe('isNegated utility', () => {
+  it('detects negation with "no" before match', () => {
+    const text = 'no mediastinal invasion';
+    const idx = text.indexOf('mediastinal');
+    expect(isNegated(text, idx)).toBe(true);
+  });
+
+  it('detects negation with "negative for"', () => {
+    const text = 'negative for mediastinal invasion';
+    const idx = text.indexOf('mediastinal');
+    expect(isNegated(text, idx)).toBe(true);
+  });
+
+  it('detects negation with "free of"', () => {
+    const text = 'tumor is free of mediastinal invasion';
+    const idx = text.indexOf('mediastinal');
+    expect(isNegated(text, idx)).toBe(true);
+  });
+
+  it('detects negation with "without"', () => {
+    const text = 'tumor without mediastinal invasion';
+    const idx = text.indexOf('mediastinal');
+    expect(isNegated(text, idx)).toBe(true);
+  });
+
+  it('does NOT negate positive finding', () => {
+    const text = 'mediastinal invasion is present';
+    const idx = text.indexOf('mediastinal');
+    expect(isNegated(text, idx)).toBe(false);
+  });
+
+  it('does NOT negate "tumor invades mediastinum"', () => {
+    const text = 'tumor invades mediastinum';
+    const idx = text.indexOf('invades');
+    expect(isNegated(text, idx)).toBe(false);
+  });
+});
+
+describe('pT4 negation in full pipeline', () => {
+  it('"no mediastinal invasion" should NOT trigger pT4', () => {
+    const text = 'Adenocarcinoma, greatest dimension 2.5 cm. No mediastinal invasion. Lymph nodes negative. No distant metastasis.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).not.toContain('pT4');
+  });
+
+  it('"negative for mediastinal invasion" should NOT trigger pT4', () => {
+    const text = 'Adenocarcinoma, greatest dimension 2.5 cm. Negative for mediastinal invasion. Lymph nodes negative. No distant metastasis.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).not.toContain('pT4');
+  });
+
+  it('"tumor is free of mediastinal invasion" should NOT trigger pT4', () => {
+    const text = 'Adenocarcinoma, greatest dimension 2.5 cm. Tumor is free of mediastinal invasion. Lymph nodes negative.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).not.toContain('pT4');
+  });
+
+  it('"tumor invades mediastinum" SHOULD trigger pT4', () => {
+    const text = 'Adenocarcinoma, greatest dimension 2.5 cm. Tumor invades mediastinum. Lymph nodes negative.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).toContain('pT4');
+  });
+
+  it('"mediastinal invasion is present" SHOULD trigger pT4', () => {
+    const text = 'Adenocarcinoma, greatest dimension 2.5 cm. Mediastinal invasion is present. Lymph nodes negative.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).toContain('pT4');
   });
 });
