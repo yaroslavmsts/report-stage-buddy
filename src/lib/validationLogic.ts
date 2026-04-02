@@ -676,23 +676,49 @@ export function detectPT4Structures(
   };
 
   for (const [key, config] of Object.entries(pT4Patterns)) {
+    let hasPositive = false;
+    let hasNegation = false;
+
     for (const pattern of config.patterns) {
-      const match = pattern.exec(text);
-      if (match) {
+      // Reset lastIndex for global-safe usage
+      const re = new RegExp(pattern.source, pattern.flags.replace('g', ''));
+      let searchText = text;
+      let offset = 0;
+
+      // Find ALL occurrences of this pattern in the text
+      while (searchText.length > 0) {
+        const match = re.exec(searchText);
+        if (!match) break;
+
+        const absoluteIndex = offset + match.index;
+
         // For bridge patterns, apply sentence-level negation check
         const isBridge = pattern.source.includes('[^.]{0,80}');
         if (isBridge && isBridgeSentenceNegated(match[0])) {
-          continue; // Negated bridge — skip
+          // Move past this match
+          offset += match.index + match[0].length;
+          searchText = text.substring(offset);
+          continue;
         }
-        // Check if negated via match-index-based negation
-        if (!isNegated(text, match.index)) {
-          // Also check via legacy isNegatedFinding for backward compat
-          if (!isNegatedFinding(key.replace(/_/g, ' '), text)) {
-            detectedStructures.push(config.display);
-            break;
-          }
+
+        // Check if this specific occurrence is negated
+        const negatedByWindow = isNegated(text, absoluteIndex);
+        
+        if (negatedByWindow) {
+          hasNegation = true;
+        } else {
+          hasPositive = true;
         }
+
+        // Move past this match to find more
+        offset += match.index + match[0].length;
+        searchText = text.substring(offset);
       }
+    }
+
+    // POSITIVE ALWAYS WINS: if any positive occurrence exists, detect it
+    if (hasPositive) {
+      detectedStructures.push(config.display);
     }
   }
   
