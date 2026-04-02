@@ -332,6 +332,30 @@ const BRIDGE_NEGATION_PHRASES = [
   'does not invade', 'did not invade', 'no sign of', 'is intact', 'are intact',
 ];
 
+// NEGATION TERMS for proximity-based negation detection
+const NEGATION_WINDOW_TERMS = [
+  'no', 'not', 'without', 'negative for', 'absence of', 'free of', 'denies',
+  'no evidence of', 'no sign of', 'absent', 'negative', 'intact',
+  'does not', 'did not', 'do not', 'unremarkable',
+];
+
+/**
+ * Returns true if the match at `matchIndex` in `text` is preceded by a negation term
+ * within a window of ~5 words (roughly 60 chars) before the match start.
+ */
+export function isNegated(text: string, matchIndex: number): boolean {
+  const windowStart = Math.max(0, matchIndex - 60);
+  const precedingText = text.substring(windowStart, matchIndex).toLowerCase();
+
+  // Check multi-word negation phrases first
+  for (const term of NEGATION_WINDOW_TERMS) {
+    if (precedingText.includes(term)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Checks if a sentence contains a standard negation phrase that confirms negative status
  * These are clear, unambiguous negations that should NOT trigger conflict warnings
