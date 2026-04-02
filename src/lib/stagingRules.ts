@@ -1,11 +1,12 @@
-// AJCC 8th Edition - Lung Cancer Full TNM Staging Rules
+// AJCC 9th Edition - Lung Cancer Full TNM Staging Rules
 // This is the Source of Truth for all staging calculations
+// Effective January 1, 2025
 
 export interface GoldenRule {
   id: string;
   name: string;
   description: string;
-  priority: number; // Lower = higher priority (checked first)
+  priority: number;
 }
 
 export interface StagingRule {
@@ -14,7 +15,7 @@ export interface StagingRule {
   min_size_cm?: number;
   max_size_cm?: number;
   overrides?: string[];
-  priority?: number; // Lower number = higher priority
+  priority?: number;
 }
 
 export interface NodeRule {
@@ -82,7 +83,7 @@ export const GOLDEN_RULES: GoldenRule[] = [
   }
 ];
 
-// Regional Lymph Node (pN) Rules
+// Regional Lymph Node (pN) Rules — AJCC 9th Edition: N2 split into N2a/N2b
 export const NODE_RULES: NodeRule[] = [
   {
     stage: "pN0",
@@ -95,9 +96,14 @@ export const NODE_RULES: NodeRule[] = [
     keywords: ["ipsilateral hilar", "peribronchial", "hilar lymph node metastasis", "n1 node", "level 10", "level 11", "level 12", "level 13", "level 14", "direct invasion of lymph node", "directly invades lymph node", "tumor invades hilar lymph node", "tumor invades peribronchial lymph node", "direct extension into lymph node", "directly involves lymph node"]
   },
   {
-    stage: "pN2",
-    criteria: "Metastasis in ipsilateral mediastinal and/or subcarinal lymph nodes",
-    keywords: ["ipsilateral mediastinal", "subcarinal", "mediastinal lymph node metastasis", "n2 node", "level 2", "level 4", "level 5", "level 6", "level 7", "level 8", "level 9"]
+    stage: "pN2a",
+    criteria: "Metastasis in a SINGLE ipsilateral mediastinal or subcarinal station",
+    keywords: ["single station", "single mediastinal", "n2a", "one station"]
+  },
+  {
+    stage: "pN2b",
+    criteria: "Metastasis in MULTIPLE ipsilateral mediastinal or subcarinal stations",
+    keywords: ["multiple stations", "n2b", "two stations", "three stations"]
   },
   {
     stage: "pN3",
@@ -106,7 +112,13 @@ export const NODE_RULES: NodeRule[] = [
   }
 ];
 
-// Distant Metastasis (pM) Rules
+// Shared N2-level keywords used for initial N2 detection before subclassification
+const N2_SHARED_KEYWORDS = [
+  "ipsilateral mediastinal", "subcarinal", "mediastinal lymph node metastasis",
+  "n2 node", "level 2", "level 4", "level 5", "level 6", "level 7", "level 8", "level 9"
+];
+
+// Distant Metastasis (pM) Rules — AJCC 9th Edition: M1c split into M1c1/M1c2
 export const METASTASIS_RULES: MetastasisRule[] = [
   {
     stage: "pM0",
@@ -124,47 +136,56 @@ export const METASTASIS_RULES: MetastasisRule[] = [
     keywords: ["single extrathoracic metastasis", "single distant metastasis", "single organ metastasis", "m1b"]
   },
   {
-    stage: "pM1c",
-    criteria: "Multiple extrathoracic metastases in one or more organs",
-    keywords: ["multiple extrathoracic metastases", "multiple distant metastases", "widespread metastases", "m1c"]
+    stage: "pM1c1",
+    criteria: "Multiple extrathoracic metastases in a SINGLE organ system",
+    keywords: ["multiple extrathoracic metastases single organ", "m1c1"]
+  },
+  {
+    stage: "pM1c2",
+    criteria: "Multiple extrathoracic metastases in MULTIPLE organ systems",
+    keywords: ["multiple extrathoracic metastases multiple organs", "m1c2"]
   }
 ];
 
-// AJCC 8th Edition Stage Grouping
+// AJCC 9th Edition Stage Grouping — FULL REBUILD
 export const STAGE_GROUPS: StageGroup[] = [
   // Stage 0
   { group: "Stage 0", t: ["Tis"], n: ["N0"], m: ["M0"] },
-  
+
   // Stage IA
   { group: "Stage IA1", t: ["T1mi", "T1a"], n: ["N0"], m: ["M0"] },
   { group: "Stage IA2", t: ["T1b"], n: ["N0"], m: ["M0"] },
   { group: "Stage IA3", t: ["T1c"], n: ["N0"], m: ["M0"] },
-  
+
   // Stage IB
   { group: "Stage IB", t: ["T2a"], n: ["N0"], m: ["M0"] },
-  
+
   // Stage IIA
   { group: "Stage IIA", t: ["T2b"], n: ["N0"], m: ["M0"] },
-  
+
   // Stage IIB
   { group: "Stage IIB", t: ["T1a", "T1b", "T1c", "T2a", "T2b"], n: ["N1"], m: ["M0"] },
   { group: "Stage IIB", t: ["T3"], n: ["N0"], m: ["M0"] },
-  
+  { group: "Stage IIB", t: ["T1c"], n: ["N2a"], m: ["M0"] }, // NEW in 9th (was IIIA)
+
   // Stage IIIA
-  { group: "Stage IIIA", t: ["T1a", "T1b", "T1c", "T2a", "T2b"], n: ["N2"], m: ["M0"] },
+  { group: "Stage IIIA", t: ["T1a", "T1b"], n: ["N2a"], m: ["M0"] },
+  { group: "Stage IIIA", t: ["T2a", "T2b"], n: ["N2a"], m: ["M0"] },
   { group: "Stage IIIA", t: ["T3"], n: ["N1"], m: ["M0"] },
   { group: "Stage IIIA", t: ["T4"], n: ["N0", "N1"], m: ["M0"] },
-  
+
   // Stage IIIB
+  { group: "Stage IIIB", t: ["T1a", "T1b", "T1c", "T2a", "T2b"], n: ["N2b"], m: ["M0"] },
   { group: "Stage IIIB", t: ["T1a", "T1b", "T1c", "T2a", "T2b"], n: ["N3"], m: ["M0"] },
-  { group: "Stage IIIB", t: ["T3", "T4"], n: ["N2"], m: ["M0"] },
-  
+  { group: "Stage IIIB", t: ["T3", "T4"], n: ["N2a"], m: ["M0"] },
+
   // Stage IIIC
+  { group: "Stage IIIC", t: ["T3", "T4"], n: ["N2b"], m: ["M0"] },
   { group: "Stage IIIC", t: ["T3", "T4"], n: ["N3"], m: ["M0"] },
-  
+
   // Stage IV
   { group: "Stage IVA", t: ["any"], n: ["any"], m: ["M1a", "M1b"] },
-  { group: "Stage IVB", t: ["any"], n: ["any"], m: ["M1c"] }
+  { group: "Stage IVB", t: ["any"], n: ["any"], m: ["M1c", "M1c1", "M1c2"] }
 ];
 
 // ICD-10 Codes for Lung Cancer by Site
@@ -207,10 +228,10 @@ export const ICD10_CODES: ICD10Code[] = [
   }
 ];
 
-// Source of Truth JSON for AJCC 8th Edition Lung Cancer Full TNM Staging
+// Source of Truth JSON for AJCC 9th Edition Lung Cancer Full TNM Staging
 export const STAGING_RULES: StagingRulesDatabase = {
-  staging_system: "AJCC 8th Edition - Lung Cancer (TNM)",
-  source: "AJCC 8th Edition Logic JSON",
+  staging_system: "AJCC 9th Edition - Lung Cancer (TNM)",
+  source: "IASLC Staging Manual 9th Edition, 2024",
   golden_rules: GOLDEN_RULES,
   rules: [
     {
@@ -316,127 +337,267 @@ export function getRulesWithOverrides(): StagingRule[] {
     .sort((a, b) => (a.priority || 10) - (b.priority || 10));
 }
 
-// Get size-based staging rule
+// Get size-based staging rule — Bug 8 fix: explicit fallback for >7cm
 export function getSizeBasedStage(size_cm: number): StagingRule | undefined {
-  // Filter to rules that have size ranges (any rule with max_size_cm or min_size_cm)
-  // This includes pT2a (priority 5) and pT3/pT4 which also have size ranges
-  const sizeRules = STAGING_RULES.rules.filter(rule => 
-    rule.max_size_cm !== undefined || rule.min_size_cm !== undefined
-  );
-  
+  // Handle edge cases first
+  if (size_cm <= 0) {
+    return STAGING_RULES.rules.find(r => r.stage === 'pTis');
+  }
+  if (size_cm <= 1.0) {
+    return STAGING_RULES.rules.find(r => r.stage === 'pT1a');
+  }
+
+  // Filter to rules with size ranges, sort by min_size ascending
+  const sizeRules = STAGING_RULES.rules
+    .filter(rule => rule.max_size_cm !== undefined || rule.min_size_cm !== undefined)
+    .sort((a, b) => (a.min_size_cm ?? 0) - (b.min_size_cm ?? 0));
+
   for (const rule of sizeRules) {
     const minSize = rule.min_size_cm ?? 0;
     const maxSize = rule.max_size_cm ?? Infinity;
-    
+
     if (size_cm > minSize && size_cm <= maxSize) {
       return rule;
     }
-    // Handle edge case for pT1a (≤1.0)
-    if (rule.stage === 'pT1a' && size_cm <= maxSize) {
-      return rule;
-    }
   }
-  
-  // If larger than all defined ranges, return pT4
+
+  // Explicit fallback: any size > 7.0 cm → pT4
   if (size_cm > 7.0) {
     return STAGING_RULES.rules.find(r => r.stage === 'pT4');
   }
-  
+
   return undefined;
 }
 
-// Get pN stage based on findings
-export function getNodeStage(text: string): { stage: string; criteria: string } | null {
-  const normalizedText = text.toLowerCase();
-  
-  // Check from highest stage (N3) to lowest (N0) for proper priority
-  for (const rule of [...NODE_RULES].reverse()) {
-    for (const keyword of rule.keywords) {
-      if (normalizedText.includes(keyword.toLowerCase())) {
-        return { stage: rule.stage, criteria: rule.criteria };
-      }
+// Helper: count unique N2-level stations mentioned in text
+function countN2Stations(text: string): number {
+  const stationSet = new Set<string>();
+  const stationPattern = /(?:station|level)\s*(\d{1,2})[rl]?\b/gi;
+  let match;
+  while ((match = stationPattern.exec(text)) !== null) {
+    const num = parseInt(match[1]);
+    if ([2, 4, 5, 6, 7, 8, 9].includes(num)) {
+      stationSet.add(String(num));
     }
   }
-  
+  // Named station mappings
+  if (/\bsubcarinal\b/i.test(text)) stationSet.add('7');
+  if (/\bparatracheal\b/i.test(text) && !stationSet.has('2') && !stationSet.has('4')) {
+    stationSet.add('paratracheal');
+  }
+  if (/\baortopulmonary\b/i.test(text) || /\bsubaortic\b/i.test(text)) {
+    stationSet.add('5_6');
+  }
+  if (/\bparaesophageal\b/i.test(text)) stationSet.add('8');
+  return stationSet.size;
+}
+
+// Helper: count organ systems with metastatic involvement
+function countOrgansWithMets(text: string): Set<string> {
+  const normalizedText = text.toLowerCase();
+  const organs = new Set<string>();
+  const hasMetContext = /metastas|mets?\b/i.test(normalizedText);
+  if (!hasMetContext) return organs;
+
+  if (/\b(?:brain|cerebral|intracranial)\b/.test(normalizedText)) organs.add('brain');
+  if (/\b(?:bone|osseous|skeletal)\b/.test(normalizedText)) organs.add('bone');
+  if (/\b(?:liver|hepatic)\b/.test(normalizedText)) organs.add('liver');
+  if (/\badrenal\b/.test(normalizedText)) organs.add('adrenal');
+  if (/\b(?:skin|cutaneous)\b/.test(normalizedText)) organs.add('skin');
+  if (/\b(?:kidney|renal)\b/.test(normalizedText)) organs.add('kidney');
+  return organs;
+}
+
+// Get pN stage based on findings — AJCC 9th: N2a/N2b subclassification
+export function getNodeStage(text: string): { stage: string; criteria: string; subclassAmbiguous?: boolean } | null {
+  const normalizedText = text.toLowerCase();
+
+  // N3 first (highest priority)
+  const n3Rule = NODE_RULES.find(r => r.stage === 'pN3')!;
+  for (const keyword of n3Rule.keywords) {
+    if (normalizedText.includes(keyword.toLowerCase())) {
+      return { stage: 'pN3', criteria: n3Rule.criteria };
+    }
+  }
+
+  // N2 detection using shared keywords, then subclassify
+  let n2Detected = false;
+  for (const keyword of N2_SHARED_KEYWORDS) {
+    if (normalizedText.includes(keyword)) {
+      n2Detected = true;
+      break;
+    }
+  }
+  // Also check N2a/N2b specific keywords
+  const n2aRule = NODE_RULES.find(r => r.stage === 'pN2a')!;
+  const n2bRule = NODE_RULES.find(r => r.stage === 'pN2b')!;
+  for (const kw of n2aRule.keywords) {
+    if (normalizedText.includes(kw)) { n2Detected = true; break; }
+  }
+  for (const kw of n2bRule.keywords) {
+    if (normalizedText.includes(kw)) { n2Detected = true; break; }
+  }
+
+  if (n2Detected) {
+    // Check for explicit N2a/N2b keywords first
+    for (const kw of n2bRule.keywords) {
+      if (normalizedText.includes(kw)) {
+        return { stage: 'pN2b', criteria: n2bRule.criteria };
+      }
+    }
+    for (const kw of n2aRule.keywords) {
+      if (normalizedText.includes(kw)) {
+        return { stage: 'pN2a', criteria: n2aRule.criteria };
+      }
+    }
+    // Count unique N2-level stations for subclassification
+    const stationCount = countN2Stations(normalizedText);
+    if (stationCount === 1) {
+      return { stage: 'pN2a', criteria: n2aRule.criteria };
+    } else if (stationCount >= 2) {
+      return { stage: 'pN2b', criteria: n2bRule.criteria };
+    } else {
+      return {
+        stage: 'pN2',
+        criteria: 'Metastasis in ipsilateral mediastinal and/or subcarinal lymph nodes (subclass not determined)',
+        subclassAmbiguous: true
+      };
+    }
+  }
+
+  // N1
+  const n1Rule = NODE_RULES.find(r => r.stage === 'pN1')!;
+  for (const keyword of n1Rule.keywords) {
+    if (normalizedText.includes(keyword.toLowerCase())) {
+      return { stage: 'pN1', criteria: n1Rule.criteria };
+    }
+  }
+
+  // N0
+  const n0Rule = NODE_RULES.find(r => r.stage === 'pN0')!;
+  for (const keyword of n0Rule.keywords) {
+    if (normalizedText.includes(keyword.toLowerCase())) {
+      return { stage: 'pN0', criteria: n0Rule.criteria };
+    }
+  }
+
   return null;
 }
 
-// Get pM stage based on findings
-export function getMetastasisStage(text: string): { stage: string; criteria: string } | null {
+// Get pM stage based on findings — AJCC 9th: M1c1/M1c2 subclassification
+export function getMetastasisStage(text: string): { stage: string; criteria: string; subclassAmbiguous?: boolean } | null {
   const normalizedText = text.toLowerCase();
-  
-  // Check from highest stage (M1c) to lowest for proper priority
-  for (const rule of [...METASTASIS_RULES].reverse()) {
-    for (const keyword of rule.keywords) {
-      if (normalizedText.includes(keyword.toLowerCase())) {
-        return { stage: rule.stage, criteria: rule.criteria };
-      }
+
+  // M1c detection: keywords + pattern-based
+  const m1cKeywords = ['multiple extrathoracic metastases', 'multiple distant metastases', 'widespread metastases', 'm1c'];
+  let m1cDetected = false;
+  for (const kw of m1cKeywords) {
+    if (normalizedText.includes(kw)) { m1cDetected = true; break; }
+  }
+  // Pattern: "multiple [organ] metastases"
+  if (!m1cDetected && /multiple\s+\w+\s+metastas/i.test(text)) {
+    m1cDetected = true;
+  }
+  // Multi-organ involvement
+  const organSystems = countOrgansWithMets(normalizedText);
+  if (organSystems.size >= 2) m1cDetected = true;
+
+  if (m1cDetected) {
+    if (organSystems.size >= 2) {
+      return { stage: 'pM1c2', criteria: 'Multiple extrathoracic metastases in multiple organ systems' };
+    } else if (organSystems.size === 1) {
+      return { stage: 'pM1c1', criteria: 'Multiple extrathoracic metastases in a single organ system' };
+    } else {
+      return { stage: 'pM1c', criteria: 'Multiple extrathoracic metastases (subclass not determined)', subclassAmbiguous: true };
     }
   }
-  
+
+  // M1b
+  const m1bRule = METASTASIS_RULES.find(r => r.stage === 'pM1b')!;
+  for (const keyword of m1bRule.keywords) {
+    if (normalizedText.includes(keyword.toLowerCase())) {
+      return { stage: 'pM1b', criteria: m1bRule.criteria };
+    }
+  }
+
+  // M1a
+  const m1aRule = METASTASIS_RULES.find(r => r.stage === 'pM1a')!;
+  for (const keyword of m1aRule.keywords) {
+    if (normalizedText.includes(keyword.toLowerCase())) {
+      return { stage: 'pM1a', criteria: m1aRule.criteria };
+    }
+  }
+
+  // M0
+  const m0Rule = METASTASIS_RULES.find(r => r.stage === 'pM0')!;
+  for (const keyword of m0Rule.keywords) {
+    if (normalizedText.includes(keyword.toLowerCase())) {
+      return { stage: 'pM0', criteria: m0Rule.criteria };
+    }
+  }
+
   return null;
 }
 
-// Get AJCC stage group based on T, N, M
+// Get AJCC 9th stage group based on T, N, M
 export function getStageGroup(tStage: string, nStage: string, mStage: string): string {
-  // Normalize stages (remove 'p' prefix for matching)
-  const normalizedT = tStage.replace(/^p/i, '').toUpperCase();
+  // Normalize stages (remove 'p' prefix and '(m)' suffix for matching)
+  const normalizedT = tStage.replace(/^p/i, '').replace(/\(m\)$/i, '').toUpperCase();
   const normalizedN = nStage.replace(/^p/i, '').toUpperCase();
   const normalizedM = mStage.replace(/^p/i, '').toUpperCase();
-  
+
   // Check for M1 first (Stage IV takes precedence)
   if (normalizedM.startsWith('M1')) {
-    if (normalizedM === 'M1C') {
+    if (normalizedM === 'M1C' || normalizedM === 'M1C1' || normalizedM === 'M1C2') {
       return 'Stage IVB';
     }
     return 'Stage IVA';
   }
-  
+
+  // For N2 without subclass, treat as N2A (conservative)
+  const effectiveN = normalizedN === 'N2' ? 'N2A' : normalizedN;
+
   // Find matching stage group
   for (const group of STAGE_GROUPS) {
-    const tMatch = group.t.includes('any') || group.t.some(t => normalizedT.includes(t.toUpperCase()));
-    const nMatch = group.n.includes('any') || group.n.some(n => normalizedN === n.toUpperCase());
+    const tMatch = group.t.includes('any') || group.t.some(t => normalizedT === t.toUpperCase());
+    const nMatch = group.n.includes('any') || group.n.some(n => effectiveN === n.toUpperCase());
     const mMatch = group.m.includes('any') || group.m.some(m => normalizedM === m.toUpperCase());
-    
+
     if (tMatch && nMatch && mMatch) {
       return group.group;
     }
   }
-  
+
   return 'Unable to determine';
 }
 
 // Get ICD-10 code based on tumor site
 export function getICD10Code(text: string): ICD10Code {
   const normalizedText = text.toLowerCase();
-  
-  // Check each code's keywords
+
   for (const code of ICD10_CODES) {
-    // Skip unspecified - it's the fallback
     if (code.code === 'C34.9') continue;
-    
     for (const keyword of code.keywords) {
       if (normalizedText.includes(keyword.toLowerCase())) {
         return code;
       }
     }
   }
-  
-  // Return unspecified as fallback
+
   return ICD10_CODES.find(c => c.code === 'C34.9')!;
 }
 
-// 5-Year Survival Data by Pathologic Stage (AJCC 8th Edition)
+// 5-Year Survival Data by Pathologic Stage (AJCC 9th Edition IASLC data)
 export const SURVIVAL_DATA: SurvivalData[] = [
-  { stage: "Stage IA1", five_year_survival: "90%" },
-  { stage: "Stage IA2", five_year_survival: "85%" },
-  { stage: "Stage IA3", five_year_survival: "80%" },
-  { stage: "Stage IB", five_year_survival: "73%" },
-  { stage: "Stage IIA", five_year_survival: "65%" },
-  { stage: "Stage IIB", five_year_survival: "56%" },
-  { stage: "Stage IIIA", five_year_survival: "41%" },
-  { stage: "Stage IIIB", five_year_survival: "24%" },
-  { stage: "Stage IIIC", five_year_survival: "12%" },
+  { stage: "Stage IA1", five_year_survival: "92%" },
+  { stage: "Stage IA2", five_year_survival: "88%" },
+  { stage: "Stage IA3", five_year_survival: "82%" },
+  { stage: "Stage IB", five_year_survival: "75%" },
+  { stage: "Stage IIA", five_year_survival: "68%" },
+  { stage: "Stage IIB", five_year_survival: "60%" },
+  { stage: "Stage IIIA", five_year_survival: "42%" },
+  { stage: "Stage IIIB", five_year_survival: "26%" },
+  { stage: "Stage IIIC", five_year_survival: "13%" },
   { stage: "Stage IVA", five_year_survival: "10%" },
   { stage: "Stage IVB", five_year_survival: "< 1%" }
 ];
