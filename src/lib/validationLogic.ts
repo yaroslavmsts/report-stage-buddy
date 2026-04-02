@@ -345,7 +345,14 @@ const NEGATION_WINDOW_WORDS = [
  * Returns true if the match at `matchIndex` in `text` is preceded by a negation term
  * within a window of ~5 words (roughly 60 chars) before the match start.
  */
-export function isNegated(text: string, matchIndex: number): boolean {
+// Post-match negation phrases (e.g., "invasion not identified", "invasion is absent")
+const POST_NEGATION_PHRASES = [
+  'not identified', 'not seen', 'not present', 'not detected',
+  'is absent', 'are absent', 'is negative', 'is intact', 'are intact',
+  'absent', 'negative',
+];
+
+export function isNegated(text: string, matchIndex: number, matchLength?: number): boolean {
   const windowStart = Math.max(0, matchIndex - 60);
   const precedingText = text.substring(windowStart, matchIndex).toLowerCase();
 
@@ -364,6 +371,18 @@ export function isNegated(text: string, matchIndex: number): boolean {
     const cleaned = word.replace(/[^a-z]/g, '');
     if (NEGATION_WINDOW_WORDS.includes(cleaned)) {
       return true;
+    }
+  }
+
+  // Check POST-MATCH window for trailing negation (e.g., "invasion not identified")
+  if (matchLength !== undefined) {
+    const postStart = matchIndex + matchLength;
+    const postEnd = Math.min(text.length, postStart + 40);
+    const followingText = text.substring(postStart, postEnd).toLowerCase().trim();
+    for (const phrase of POST_NEGATION_PHRASES) {
+      if (followingText.startsWith(phrase) || followingText.startsWith(' ' + phrase) || followingText.startsWith(': ' + phrase) || followingText.startsWith(' is ' + phrase.replace('is ', ''))) {
+        return true;
+      }
     }
   }
 
