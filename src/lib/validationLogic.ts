@@ -1736,6 +1736,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     return false;
   };
 
+  const directInvasionConflicts: ConflictInfo[] = [];
   for (const [key, config] of Object.entries(directInvasionPatterns)) {
     let hasPositive = false;
     let hasNegation = false;
