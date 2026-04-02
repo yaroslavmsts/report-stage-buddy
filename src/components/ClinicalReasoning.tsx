@@ -103,6 +103,9 @@ function generateClinicalReasoning(
   const hasContralateral = parsedReport.ipsilateralLobeInfo?.isContralateralNodule;
   const hasIpsilateral = parsedReport.ipsilateralLobeInfo?.isDifferentLobesSameLung;
   const hasSameLobe = parsedReport.ipsilateralLobeInfo?.isSameLobeNodule;
+  const hasConflict = parsedReport.hasConflict;
+  const conflicts = parsedReport.conflicts || [];
+  const isProvisional = calculatedResult.confidence?.provisional;
 
   if (hasAnatomicalOverride) {
     const structures = parsedReport.pT4Override.structures.join(', ').toLowerCase();
@@ -117,6 +120,13 @@ function generateClinicalReasoning(
     sentences.push(
       `Central structures and pleural surfaces were evaluated and found to be uninvolved.`
     );
+  } else if (hasConflict && conflicts.length > 0) {
+    // Uncertain/ambiguous invasion was mentioned but not confirmed
+    const structureNames = [...new Set(conflicts.map(c => c.invasionKeyword))];
+    const structureLabel = structureNames.join(' / ');
+    sentences.push(
+      `Possible ${structureLabel} involvement was mentioned, but the wording was uncertain and did not support a confirmed override. Size-based staging was used provisionally.`
+    );
   } else {
     sentences.push(
       `No anatomical overrides or nodal involvements were identified in the provided sections.`
@@ -129,9 +139,15 @@ function generateClinicalReasoning(
       ? `${calculatedResult.n_category === 'pN0' ? 'negative' : 'positive'} nodal status`
       : 'negative nodal status';
 
-    sentences.push(
-      `The overall findings confirm a Stage ${calculatedResult.stage_group} classification with ${nodalLabel}.`
-    );
+    if (isProvisional || (hasConflict && conflicts.length > 0)) {
+      sentences.push(
+        `The overall findings yield a provisional Stage ${calculatedResult.stage_group} classification with ${nodalLabel}. Clinical correlation is recommended to resolve uncertain findings.`
+      );
+    } else {
+      sentences.push(
+        `The overall findings confirm a Stage ${calculatedResult.stage_group} classification with ${nodalLabel}.`
+      );
+    }
   }
 
   return sentences;
