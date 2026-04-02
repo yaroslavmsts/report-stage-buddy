@@ -1,5 +1,5 @@
-// AJCC 8th Edition Lung Cancer Full TNM Staging Validation Engine
-// SINGLE-PASS 4-GATE ARCHITECTURE v9.0.0
+// AJCC 9th Edition Lung Cancer Full TNM Staging Validation Engine
+// SINGLE-PASS 4-GATE ARCHITECTURE v12.0.0
 // ============================================
 // Gate Hierarchy (checked in THIS SPECIFIC ORDER per Logic Hierarchy spec):
 // GATE 1: Anatomical - Scan for pT4/pT3/pT2a overrides (phrenic nerve, mediastinum, chest wall, etc.). Override → STOP.
@@ -67,6 +67,7 @@ export interface ValidationInputs {
     main_bronchus: boolean;
     diaphragm: boolean;
     hilar_fat: boolean; // Direct extension into hilar fat/soft tissue forces pT2a
+    carina_proximity: boolean; // Near carina but not invading → pT2b floor
   };
   // Golden Rule: Atelectasis/Pneumonitis
   atelectasis: {
@@ -157,6 +158,8 @@ export interface ValidationResult {
   stage_group: string | null;
   survival: SurvivalData | null;
   icd10: ICD10Code | null;
+  n2SubclassAlert?: string;
+  m1cSubclassAlert?: string;
   basis?: string;
   size_basis_cm?: number | null;
   reason: string;
@@ -355,7 +358,7 @@ const POST_NEGATION_PHRASES = [
 ];
 
 export function isNegated(text: string, matchIndex: number, matchLength?: number): boolean {
-  const windowStart = Math.max(0, matchIndex - 60);
+  const windowStart = Math.max(0, matchIndex - 20);
   const precedingText = text.substring(windowStart, matchIndex).toLowerCase();
 
   // Only consider text in the SAME sentence — find last sentence boundary
@@ -655,7 +658,6 @@ export function detectPT4Structures(
         /carinal\s*invasion/i,
         /invasion\s*(of|into)\s*(the\s*)?carina/i,
         /tumor\s*(at|involves?|invad(es?|ing))\s*(the\s*)?carina/i,
-        /less\s*than\s*2\s*cm\s*(from\s*)?(the\s*)?carina/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?carina/i,
         // BRIDGE PATTERNS
         /invasion\b[^.]{0,80}\bcarina/i,
@@ -678,23 +680,7 @@ export function detectPT4Structures(
       ],
       display: 'Diaphragm'
     },
-    phrenic_nerve: {
-      patterns: [
-        /invad(es?|ing|ed)\s*(the\s*)?phrenic\s*nerve/i,
-        /phrenic\s*nerve\s*invasion/i,
-        /phrenic\s*nerve\s*involvement/i,
-        /involves?\s*(the\s*)?phrenic\s*nerve/i,
-        /extends?\s*(into|to|through)\s*(the\s*)?phrenic\s*nerve/i,
-        /direct\s*(invasion|extension)\s*(of|into|to)\s*(the\s*)?phrenic\s*nerve/i,
-        /phrenic\s*nerve\s*(is\s*)?(invaded|involved|infiltrated|encased|destroyed)/i,
-        /infiltrat(es?|ing|ed)\s*(the\s*)?phrenic\s*nerve/i,
-        /tumor\s*(extends?|invades?|involves?)\s*(into\s*)?(the\s*)?phrenic\s*nerve/i,
-        // BRIDGE PATTERNS
-        /invasion\b[^.]{0,80}\bphrenic\s*nerve/i,
-      ],
-      display: 'Phrenic Nerve'
-    },
-  };
+};
   
   const isBridgeSentenceNegated = (matchText: string): boolean => {
     // Extract the sentence containing the match (split by period)
@@ -907,7 +893,7 @@ const LOBE_ABBREVIATIONS: Record<string, string> = {
 
 /**
  * Detects nodule laterality patterns for staging overrides
- * Per AJCC 8th Edition:
+ * Per AJCC 9th Edition:
  * - Same lobe nodule = pT3
  * - Different lobe, same lung (ipsilateral) = pT4
  * - Different lung (contralateral) = pM1a
@@ -1059,7 +1045,7 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
   ];
 
   const isNoduleMatchNegated = (matchIndex: number): boolean => {
-    const windowStart = Math.max(0, matchIndex - 40);
+    const windowStart = Math.max(0, matchIndex - 20);
     const window = text.substring(windowStart, matchIndex);
     return NODULE_NEGATION_PHRASES.some(neg => window.includes(neg));
   };
@@ -1160,7 +1146,7 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
       defaultResult.primaryLobe = LOBE_ABBREVIATIONS[primaryLobe] || primaryLobe.toUpperCase();
       defaultResult.primaryLung = LOBE_TO_LUNG_MAP[primaryLobe];
     }
-    defaultResult.message = `⚠️ pM1a OVERRIDE: Separate tumor nodule in the contralateral lung detected. Per AJCC 8th Edition, this automatically assigns pM1a staging (Stage IVA).`;
+    defaultResult.message = `⚠️ pM1a OVERRIDE: Separate tumor nodule in the contralateral lung detected. Per AJCC 9th Edition, this automatically assigns pM1a staging (Stage IVA).`;
     return defaultResult;
   }
 
@@ -1170,7 +1156,7 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
     defaultResult.primaryLung = LOBE_TO_LUNG_MAP[primaryLobe];
     defaultResult.isDifferentLobesSameLung = true;
     defaultResult.forcesT4 = true;
-    defaultResult.message = `⚠️ pT4 OVERRIDE: Separate tumor nodule in a different ipsilateral lobe detected. Per AJCC 8th Edition, this automatically assigns pT4 staging regardless of tumor size.`;
+    defaultResult.message = `⚠️ pT4 OVERRIDE: Separate tumor nodule in a different ipsilateral lobe detected. Per AJCC 9th Edition, this automatically assigns pT4 staging regardless of tumor size.`;
     return defaultResult;
   }
 
@@ -1188,7 +1174,7 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
     if (primaryLung !== noduleLung) {
       defaultResult.isContralateralNodule = true;
       defaultResult.forcesM1a = true;
-      defaultResult.message = `⚠️ pM1a OVERRIDE: Primary tumor in ${defaultResult.primaryLobe} (${primaryLung} Lung) with separate nodule in ${defaultResult.noduleLobe} (${noduleLung} Lung). Per AJCC 8th Edition, separate tumor nodule in contralateral lobe automatically assigns pM1a staging.`;
+      defaultResult.message = `⚠️ pM1a OVERRIDE: Primary tumor in ${defaultResult.primaryLobe} (${primaryLung} Lung) with separate nodule in ${defaultResult.noduleLobe} (${noduleLung} Lung). Per AJCC 9th Edition, separate tumor nodule in contralateral lobe automatically assigns pM1a staging.`;
       return defaultResult;
     }
     
@@ -1197,7 +1183,7 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
     if (primaryLung === noduleLung && primaryLobe !== noduleLobe) {
       defaultResult.isDifferentLobesSameLung = true;
       defaultResult.forcesT4 = true;
-      defaultResult.message = `⚠️ pT4 OVERRIDE: Primary tumor in ${defaultResult.primaryLobe} with separate nodule in ${defaultResult.noduleLobe} (same ${primaryLung} Lung, different lobe). Per AJCC 8th Edition, separate tumor nodule in a different ipsilateral lobe automatically assigns pT4 staging regardless of tumor size.`;
+      defaultResult.message = `⚠️ pT4 OVERRIDE: Primary tumor in ${defaultResult.primaryLobe} with separate nodule in ${defaultResult.noduleLobe} (same ${primaryLung} Lung, different lobe). Per AJCC 9th Edition, separate tumor nodule in a different ipsilateral lobe automatically assigns pT4 staging regardless of tumor size.`;
       return defaultResult;
     }
     
@@ -1205,7 +1191,7 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
     if (primaryLobe === noduleLobe) {
       defaultResult.isSameLobeNodule = true;
       defaultResult.forcesT3 = true;
-      defaultResult.message = `⚠️ pT3 OVERRIDE: Separate tumor nodule in the same lobe (${defaultResult.primaryLobe}). Per AJCC 8th Edition, this automatically assigns pT3 staging.`;
+      defaultResult.message = `⚠️ pT3 OVERRIDE: Separate tumor nodule in the same lobe (${defaultResult.primaryLobe}). Per AJCC 9th Edition, this automatically assigns pT3 staging.`;
       return defaultResult;
     }
   }
@@ -1218,15 +1204,33 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
       defaultResult.primaryLobe = LOBE_ABBREVIATIONS[primaryLobe] || primaryLobe.toUpperCase();
       defaultResult.primaryLung = LOBE_TO_LUNG_MAP[primaryLobe];
     }
-    defaultResult.message = `⚠️ pT3 OVERRIDE: Separate tumor nodule in the same lobe detected. Per AJCC 8th Edition, this automatically assigns pT3 staging regardless of tumor size.`;
+    defaultResult.message = `⚠️ pT3 OVERRIDE: Separate tumor nodule in the same lobe detected. Per AJCC 9th Edition, this automatically assigns pT3 staging regardless of tumor size.`;
     return defaultResult;
   }
+
+
+  // Bug 4 fix: require nodule-related word within 60 chars of lobe mention
+  const NODULE_CONTEXT_WORDS = ['nodule', 'tumor', 'mass', 'lesion', 'focus', 'satellite', 'separate', 'additional', 'second'];
+  const hasNoduleContextNearLobe = (lobeKey: string): boolean => {
+    const lobeRegex = new RegExp(lobeKey.replace(/\s+/g, '\\s*'), 'gi');
+    let m: RegExpExecArray | null;
+    while ((m = lobeRegex.exec(text)) !== null) {
+      const start = Math.max(0, m.index - 60);
+      const end = Math.min(text.length, m.index + m[0].length + 60);
+      const window = text.substring(start, end).toLowerCase();
+      if (NODULE_CONTEXT_WORDS.some(w => window.includes(w))) return true;
+    }
+    return false;
+  };
 
   // Check if we have multiple distinct lobes in the same lung mentioned (implicit ipsilateral nodule)
   // This catches cases like "tumor in RUL... nodule in RLL" without explicit "separate" language
   if (allLobeMatches.length >= 2) {
     const uniqueLobes = [...new Set(allLobeMatches)];
-    if (uniqueLobes.length >= 2) {
+    // Bug 4: Only trigger if nodule-related word appears near non-primary lobe
+    const nonPrimaryLobes = uniqueLobes.filter(l => l !== primaryLobe);
+    const hasNoduleContext = nonPrimaryLobes.some(l => hasNoduleContextNearLobe(l));
+    if (uniqueLobes.length >= 2 && hasNoduleContext) {
       const lobesWithLungs = uniqueLobes.map(l => ({ lobe: l, lung: LOBE_TO_LUNG_MAP[l] }));
       
       // Check for same lung, different lobes
@@ -1240,7 +1244,7 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
         defaultResult.noduleLung = 'Right';
         defaultResult.isDifferentLobesSameLung = true;
         defaultResult.forcesT4 = true;
-        defaultResult.message = `⚠️ pT4 OVERRIDE: Tumor nodules detected in ${defaultResult.primaryLobe} and ${defaultResult.noduleLobe} (both Right Lung, different lobes). Per AJCC 8th Edition, separate tumor nodule in a different ipsilateral lobe automatically assigns pT4 staging regardless of tumor size.`;
+        defaultResult.message = `⚠️ pT4 OVERRIDE: Tumor nodules detected in ${defaultResult.primaryLobe} and ${defaultResult.noduleLobe} (both Right Lung, different lobes). Per AJCC 9th Edition, separate tumor nodule in a different ipsilateral lobe automatically assigns pT4 staging regardless of tumor size.`;
         return defaultResult;
       }
       
@@ -1251,7 +1255,7 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
         defaultResult.noduleLung = 'Left';
         defaultResult.isDifferentLobesSameLung = true;
         defaultResult.forcesT4 = true;
-        defaultResult.message = `⚠️ pT4 OVERRIDE: Tumor nodules detected in ${defaultResult.primaryLobe} and ${defaultResult.noduleLobe} (both Left Lung, different lobes). Per AJCC 8th Edition, separate tumor nodule in a different ipsilateral lobe automatically assigns pT4 staging regardless of tumor size.`;
+        defaultResult.message = `⚠️ pT4 OVERRIDE: Tumor nodules detected in ${defaultResult.primaryLobe} and ${defaultResult.noduleLobe} (both Left Lung, different lobes). Per AJCC 9th Edition, separate tumor nodule in a different ipsilateral lobe automatically assigns pT4 staging regardless of tumor size.`;
         return defaultResult;
       }
       
@@ -1263,7 +1267,7 @@ export function detectIpsilateralLobeNodules(reportText: string): IpsilateralLob
         defaultResult.noduleLung = 'Left';
         defaultResult.isContralateralNodule = true;
         defaultResult.forcesM1a = true;
-        defaultResult.message = `⚠️ pM1a OVERRIDE: Tumor nodules detected in ${defaultResult.primaryLobe} (Right Lung) and ${defaultResult.noduleLobe} (Left Lung). Per AJCC 8th Edition, contralateral lung nodule automatically assigns pM1a staging.`;
+        defaultResult.message = `⚠️ pM1a OVERRIDE: Tumor nodules detected in ${defaultResult.primaryLobe} (Right Lung) and ${defaultResult.noduleLobe} (Left Lung). Per AJCC 9th Edition, contralateral lung nodule automatically assigns pM1a staging.`;
         return defaultResult;
       }
     }
@@ -1328,6 +1332,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
       main_bronchus: false,
       diaphragm: false,
       hilar_fat: false,
+      carina_proximity: false,
     },
     atelectasis: {
       has_total_lung_atelectasis: false,
@@ -1364,8 +1369,8 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   // Check for AIS (Adenocarcinoma in situ)
   if (
     text.includes('adenocarcinoma in situ') ||
-    text.includes('ais') && (text.includes('adenocarcinoma') || text.includes('lepidic')) ||
-    /\bais\b/.test(text) && text.includes('lepidic pattern')
+    /\bais\b/i.test(text) && (text.includes('adenocarcinoma') || text.includes('lepidic')) ||
+    /\bais\b/i.test(text) && text.includes('lepidic pattern')
   ) {
     inputs.histology.is_AIS = true;
     extractedText.histologyFindings.push('Adenocarcinoma in situ (AIS) detected');
@@ -1375,7 +1380,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   if (
     text.includes('minimally invasive adenocarcinoma') ||
     text.includes('mia') && text.includes('adenocarcinoma') ||
-    (text.includes('invasion') && text.includes('≤5mm') || text.includes('<= 5mm') || text.includes('less than 5 mm'))
+    ((text.includes('invasive component') || text.includes('invasive focus')) && (text.includes('≤5mm') || text.includes('<= 5mm') || text.includes('less than 5 mm') || text.includes('≤ 5 mm') || text.includes('0.5 cm')))
   ) {
     inputs.histology.is_MIA = true;
     extractedText.histologyFindings.push('Minimally invasive adenocarcinoma (MIA) detected');
@@ -1556,7 +1561,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
       if (findingIndex === -1) continue;
       
       // Look for negation phrase within window before the finding
-      const windowStart = Math.max(0, findingIndex - 60);
+      const windowStart = Math.max(0, findingIndex - 20);
       const windowText = normalizedText.substring(windowStart, findingIndex + normalizedFinding.length + 20);
       
       if (windowText.includes(phrase)) {
@@ -1624,7 +1629,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   
   // ============================================
   // PARIETAL PLEURA → PL3 MAPPING
-  // Per AJCC 8th Edition, invasion of the parietal pleura = PL3 → pT3
+  // Per AJCC 9th Edition, invasion of the parietal pleura = PL3 → pT3
   // This must be detected separately from visceral pleural invasion
   // ============================================
   const parietalPleuraPatterns = [
@@ -1874,6 +1879,20 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     }
   }
 
+
+  // Bug 2 fix: Carina proximity (not invasion) → pT2b floor
+  const carinaProximityPatterns = [
+    /less\s*than\s*2\s*cm\s*(from\s*)?(the\s*)?carina/i,
+    /within\s*2\s*cm\s*(of\s*)?(the\s*)?carina/i,
+  ];
+  for (const pattern of carinaProximityPatterns) {
+    if (pattern.test(text) && !isNegatedFinding('carina', text)) {
+      inputs.direct_invasion.carina_proximity = true;
+      extractedText.histologyFindings.push('Carina proximity: tumor within 2 cm (not invading) → pT2b floor');
+      break;
+    }
+  }
+
   // Extract reported stage from the report - expanded to include all pT stages
   let reportedStage: string | null = null;
   const stagePatterns = [
@@ -2044,7 +2063,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
           sentence: evidence.sentence,
           startIndex: evidence.startIndex,
           endIndex: evidence.endIndex,
-          explanation: `${structure} invasion forces pT4 per AJCC 8th Edition.`,
+          explanation: `${structure} invasion forces pT4 per AJCC 9th Edition.`,
         });
       }
     }
@@ -2073,7 +2092,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
             sentence: evidence.sentence,
             startIndex: evidence.startIndex,
             endIndex: evidence.endIndex,
-            explanation: `${label} invasion forces ${stage} per AJCC 8th Edition.`,
+            explanation: `${label} invasion forces ${stage} per AJCC 9th Edition.`,
           });
           break;
         }
@@ -2094,7 +2113,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
           sentence: evidence.sentence,
           startIndex: evidence.startIndex,
           endIndex: evidence.endIndex,
-          explanation: `Visceral pleural invasion (${inputs.pleural_invasion.pl_status || 'PL1'}) sets pT2a floor per AJCC 8th Edition.`,
+          explanation: `Visceral pleural invasion (${inputs.pleural_invasion.pl_status || 'PL1'}) sets pT2a floor per AJCC 9th Edition.`,
         });
         break;
       }
@@ -2112,7 +2131,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
         sentence: evidence.sentence,
         startIndex: evidence.startIndex,
         endIndex: evidence.endIndex,
-        explanation: 'Total lung atelectasis sets pT2 floor per AJCC 8th Edition Golden Rule.',
+        explanation: 'Total lung atelectasis sets pT2 floor per AJCC 9th Edition Golden Rule.',
       });
     }
   }
@@ -2126,7 +2145,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
         sentence: evidence.sentence,
         startIndex: evidence.startIndex,
         endIndex: evidence.endIndex,
-        explanation: 'Total lung pneumonitis sets pT2 floor per AJCC 8th Edition Golden Rule.',
+        explanation: 'Total lung pneumonitis sets pT2 floor per AJCC 9th Edition Golden Rule.',
       });
     }
   }
@@ -2164,7 +2183,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
           sentence: evidence.sentence,
           startIndex: evidence.startIndex,
           endIndex: evidence.endIndex,
-          explanation: 'Separate tumor nodule in same lobe forces pT3 per AJCC 8th Edition.',
+          explanation: 'Separate tumor nodule in same lobe forces pT3 per AJCC 9th Edition.',
         });
         break;
       }
@@ -2183,7 +2202,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
           sentence: evidence.sentence,
           startIndex: evidence.startIndex,
           endIndex: evidence.endIndex,
-          explanation: `Separate tumor nodule in different ipsilateral lobe (${ipsilateralLobeInfo.primaryLobe} → ${ipsilateralLobeInfo.noduleLobe}) forces pT4 per AJCC 8th Edition.`,
+          explanation: `Separate tumor nodule in different ipsilateral lobe (${ipsilateralLobeInfo.primaryLobe} → ${ipsilateralLobeInfo.noduleLobe}) forces pT4 per AJCC 9th Edition.`,
         });
         found = true;
         break;
@@ -2200,7 +2219,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
           sentence: evidence.sentence,
           startIndex: evidence.startIndex,
           endIndex: evidence.endIndex,
-          explanation: `Separate tumor nodule in different ipsilateral lobe (${ipsilateralLobeInfo.primaryLobe} → ${ipsilateralLobeInfo.noduleLobe}) forces pT4 per AJCC 8th Edition.`,
+          explanation: `Separate tumor nodule in different ipsilateral lobe (${ipsilateralLobeInfo.primaryLobe} → ${ipsilateralLobeInfo.noduleLobe}) forces pT4 per AJCC 9th Edition.`,
         });
       }
     }
@@ -2218,7 +2237,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
           sentence: evidence.sentence,
           startIndex: evidence.startIndex,
           endIndex: evidence.endIndex,
-          explanation: 'Contralateral lung nodule forces pM1a per AJCC 8th Edition.',
+          explanation: 'Contralateral lung nodule forces pM1a per AJCC 9th Edition.',
         });
         found = true;
         break;
@@ -2234,7 +2253,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
           sentence: evidence.sentence,
           startIndex: evidence.startIndex,
           endIndex: evidence.endIndex,
-          explanation: 'Contralateral lung nodule forces pM1a per AJCC 8th Edition.',
+          explanation: 'Contralateral lung nodule forces pM1a per AJCC 9th Edition.',
         });
       }
     }
@@ -2293,7 +2312,7 @@ function maxT(...cats: Array<string | null | undefined>): string | null {
 }
 
 // ============================================
-// SINGLE-PASS 4-GATE ARCHITECTURE v11.0.0 — DETERMINISTIC RESOLUTION
+// SINGLE-PASS 4-GATE ARCHITECTURE v12.0.0 — DETERMINISTIC RESOLUTION
 // ============================================
 // Gate order per MANDATORY HIERARCHY:
 // GATE 1: Anatomical — pT4/pT3 = HARD OVERRIDE (STOP). pT2a = FLOOR (continue).
@@ -2549,6 +2568,16 @@ export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean)
   
   const n_category = nResult?.stage || 'pN0';
   let m_category = mResult?.stage || 'pM0';
+  
+  // AJCC 9th: N2/M1c subclass alerts
+  let n2SubclassAlert: string | undefined;
+  let m1cSubclassAlert: string | undefined;
+  if (nResult?.subclassAmbiguous) {
+    n2SubclassAlert = 'N2 subclassification requires manual input: confirm N2a (single station) or N2b (multiple stations)';
+  }
+  if (mResult?.subclassAmbiguous) {
+    m1cSubclassAlert = 'M1c subclassification requires manual input: confirm M1c1 (single organ system) or M1c2 (multiple organ systems)';
+  }
 
   // Use pre-detected multiple primary tumors (from parseReport) — no re-detection
   const hasMultiplePrimaries = multiplePrimaryTumors;
@@ -2596,7 +2625,7 @@ export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean)
     const survival = stage_group ? getSurvivalData(stage_group) : null;
     
     // Build Gate Execution table for reasoning output
-    let gateTable = `## SINGLE-PASS 4-GATE ARCHITECTURE v10.0.0
+    let gateTable = `## SINGLE-PASS 4-GATE ARCHITECTURE v12.0.0
 
 ---
 
@@ -2744,6 +2773,8 @@ ${gateDetail}`;
       gateExecutions: localGateExecutions,
       clinicalFacts,
       confidence,
+      n2SubclassAlert,
+      m1cSubclassAlert,
     };
   };
 
@@ -2802,6 +2833,19 @@ ${gateDetail}`;
     });
   }
 
+
+  // Bug 2: Carina proximity (not invasion) → pT2b floor
+  if (inputs.direct_invasion.carina_proximity) {
+    tFloors.push('pT2b');
+    gateExecutions.push({
+      gate: 'GATE 1',
+      name: 'Carina Proximity',
+      status: 'Triggered',
+      detail: 'Tumor within 2 cm of carina (not invading) → pT2b floor',
+      stoppedHere: false,
+    });
+  }
+
   // ============================================
   // GATE 1: ANATOMICAL OVERRIDE
   // pT4/pT3 → HARD OVERRIDE (early return)
@@ -2814,7 +2858,7 @@ ${gateDetail}`;
     const negationPhrases = ['not ', 'no ', 'without ', 'negative ', 'absent', 'intact', 'free of', 'free from'];
     const findingIndex = normalizedText.indexOf(normalizedFinding);
     if (findingIndex === -1) return false;
-    const windowStart = Math.max(0, findingIndex - 40);
+    const windowStart = Math.max(0, findingIndex - 20);
     const windowText = normalizedText.substring(windowStart, findingIndex);
     // Use word-boundary-safe matching to avoid false positives like 'no' inside 'carcinoma'
     return negationPhrases.some(phrase => {
@@ -2839,11 +2883,11 @@ ${gateDetail}`;
     gate1Detail = `Invasion of: ${pT4Override.structures.join(', ')} → pT4`;
   }
 
-  // SAFETY NET: phrenic nerve
+  // SAFETY NET: phrenic nerve → pT3 (AJCC 9th Edition)
   if (!gate1Triggered && inputs.direct_invasion.phrenic_nerve) {
     gate1Triggered = true;
-    gate1Stage = 'pT4';
-    gate1Detail = 'Invasion of: Phrenic Nerve → pT4';
+    gate1Stage = 'pT3';
+    gate1Detail = 'Invasion of: Phrenic Nerve → pT3';
   }
 
   // SAFETY NET: diaphragm
@@ -2946,42 +2990,12 @@ ${gateDetail}`;
     name: 'Anatomical',
     status: gate1Triggered ? 'Triggered' : 'Skipped',
     detail: gate1Triggered ? gate1Detail : 'No anatomical override found',
-    stoppedHere: gate1IsHardOverride,
+    stoppedHere: false, // All gates always run for deterministic resolution
   });
 
-  // If GATE 1 hard override (pT4/pT3) → STOP (anatomical overrides are absolute)
+  // Bug 3 fix: Gate 1 hard overrides push to tHardOverrides — all gates always run
   if (gate1IsHardOverride && gate1Stage) {
-    gateExecutions.push({
-      gate: 'GATE 2',
-      name: 'Component',
-      status: 'Skipped',
-      detail: 'Anatomical override triggered → skipped',
-      stoppedHere: false,
-    });
-    gateExecutions.push({
-      gate: 'GATE 3',
-      name: 'Laterality',
-      status: 'Skipped',
-      detail: 'Anatomical override triggered → skipped',
-      stoppedHere: false,
-    });
-    gateExecutions.push({
-      gate: 'GATE 4',
-      name: 'Default',
-      status: 'Skipped',
-      detail: 'Anatomical override triggered → skipped',
-      stoppedHere: false,
-    });
-
-    return buildGateResult(
-      'applicable',
-      gate1Stage,
-      'anatomical_override',
-      undefined,
-      1,
-      `**GATE 1 TRIGGERED: Anatomical Override**\n\n${gate1Detail}\n\nPer AJCC 8th Edition, anatomical invasion overrides size-based staging. Processing stopped at GATE 1.`,
-      gateExecutions
-    );
+    tHardOverrides.push(gate1Stage);
   }
 
   // ============================================
@@ -3291,7 +3305,7 @@ export function compareStages(
       isMatch: false,
       isAutoCalculated: false,
       message: 'Validation Failure: Staging Mismatch Detected',
-      details: `According to AJCC 8th Edition/CAP Lung Protocol, visceral pleural invasion automatically upgrades the pT category. • Tumor Size: ${tumorSize !== null ? tumorSize + ' cm' : 'Not specified'}. • Pleural Status: ${plStatus} (visceral pleural invasion present). • Logic: Any tumor with visceral pleural invasion (${plStatus}) must be classified as pT2a or higher, regardless of tumor size, making the reported ${reportedStage} clinically inconsistent.`,
+      details: `According to AJCC 9th Edition/CAP Lung Protocol, visceral pleural invasion automatically upgrades the pT category. • Tumor Size: ${tumorSize !== null ? tumorSize + ' cm' : 'Not specified'}. • Pleural Status: ${plStatus} (visceral pleural invasion present). • Logic: Any tumor with visceral pleural invasion (${plStatus}) must be classified as pT2a or higher, regardless of tumor size, making the reported ${reportedStage} clinically inconsistent.`,
       isPleuralInvasionMismatch: true,
     };
   }
@@ -3304,7 +3318,7 @@ export function compareStages(
       isMatch: false,
       isAutoCalculated: false,
       message: 'Validation Failure: Contralateral Nodule Mismatch',
-      details: `According to AJCC 8th Edition, a separate tumor nodule in the CONTRALATERAL lung automatically assigns pM1a staging (Stage IVA).
+      details: `According to AJCC 9th Edition, a separate tumor nodule in the CONTRALATERAL lung automatically assigns pM1a staging (Stage IVA).
 
 **Detected Findings:**
 • Primary Tumor: ${ipsilateralLobeInfo.primaryLobe || 'Identified'} (${ipsilateralLobeInfo.primaryLung || 'One'} Lung)
@@ -3332,7 +3346,7 @@ export function compareStages(
       isMatch: false,
       isAutoCalculated: false,
       message: 'Validation Failure: Same Lobe Nodule Mismatch',
-      details: `According to AJCC 8th Edition, a separate tumor nodule in the SAME lobe automatically assigns pT3 staging.
+      details: `According to AJCC 9th Edition, a separate tumor nodule in the SAME lobe automatically assigns pT3 staging.
 
 **Detected Findings:**
 • Primary Tumor: ${ipsilateralLobeInfo.primaryLobe || 'Identified'}
@@ -3357,7 +3371,7 @@ export function compareStages(
       isMatch: false,
       isAutoCalculated: false,
       message: 'Validation Failure: Ipsilateral Lobe Mismatch',
-      details: `According to AJCC 8th Edition, a separate tumor nodule in a different lobe of the SAME lung (ipsilateral) automatically assigns pT4 staging.
+      details: `According to AJCC 9th Edition, a separate tumor nodule in a different lobe of the SAME lung (ipsilateral) automatically assigns pT4 staging.
 
 **Detected Findings:**
 • Primary Tumor: ${ipsilateralLobeInfo.primaryLobe} (${ipsilateralLobeInfo.primaryLung} Lung)
@@ -3415,8 +3429,8 @@ export function compareStages(
 
 **Calculated Stage:** ${calculatedStage} — based on invasive component of ${invasiveSize} cm, which falls within the ${calculatedStage} criteria (${criteriaText}).
 
-**Conclusion:** The reported ${reportedStage} does not align with AJCC 8th Edition staging criteria for this histologic subtype.`,
-      clinicalNote: 'Per CAP Lung Protocol Note A and AJCC 8th Edition, for nonmucinous adenocarcinomas with a lepidic component, only the size of the invasive component is used to assign the T category.',
+**Conclusion:** The reported ${reportedStage} does not align with AJCC 9th Edition staging criteria for this histologic subtype.`,
+      clinicalNote: 'Per CAP Lung Protocol Note A and AJCC 9th Edition, for nonmucinous adenocarcinomas with a lepidic component, only the size of the invasive component is used to assign the T category.',
       isLepidicMismatch: true,
     };
   }
@@ -3426,7 +3440,7 @@ export function compareStages(
       isMatch: true,
       isAutoCalculated: false,
       message: 'Validation Success: Stage Matches',
-      details: `According to AJCC 8th Edition/CAP Lung Protocol, the reported ${reportedStage} matches the calculated ${calculatedResult.t_category}. ${calculatedResult.reason}`,
+      details: `According to AJCC 9th Edition/CAP Lung Protocol, the reported ${reportedStage} matches the calculated ${calculatedResult.t_category}. ${calculatedResult.reason}`,
     };
   }
 
@@ -3439,6 +3453,6 @@ export function compareStages(
     isMatch: false,
     isAutoCalculated: false,
     message: 'Validation Failure: Staging Mismatch Detected',
-    details: `According to AJCC 8th Edition/CAP Lung Protocol, the reported stage does not match the calculated stage. • Tumor Size: ${tumorSize !== null ? tumorSize + ' cm' : 'Not specified'}${invasiveSize !== null ? ` • Invasive Size: ${invasiveSize} cm` : ''}. • Calculated Stage: ${calculatedResult.t_category}. • Logic: Based on the size of ${sizeUsed} cm, the correct stage should be ${calculatedResult.t_category}, making the reported ${reportedStage} clinically inconsistent.`,
+    details: `According to AJCC 9th Edition/CAP Lung Protocol, the reported stage does not match the calculated stage. • Tumor Size: ${tumorSize !== null ? tumorSize + ' cm' : 'Not specified'}${invasiveSize !== null ? ` • Invasive Size: ${invasiveSize} cm` : ''}. • Calculated Stage: ${calculatedResult.t_category}. • Logic: Based on the size of ${sizeUsed} cm, the correct stage should be ${calculatedResult.t_category}, making the reported ${reportedStage} clinically inconsistent.`,
   };
 }
