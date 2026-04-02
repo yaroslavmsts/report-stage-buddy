@@ -1782,12 +1782,11 @@ export function parsePathologyReport(reportText: string): ParsedReport {
       const displayName = key.replace(/_/g, ' ');
       extractedText.histologyFindings.push(`Direct invasion: ${displayName}`);
 
-      // If both positive and negated exist, add a conflict
       if (hasNegation) {
-        const displayName = key.replace(/_/g, ' ');
-        allConflicts.push({
-          sentence: `Conflicting ${displayName} findings: both positive and negative mentions detected`,
-          invasionKeyword: displayName,
+        const conflictName = key.replace(/_/g, ' ');
+        directInvasionConflicts.push({
+          sentence: `Conflicting ${conflictName} findings: both positive and negative mentions detected`,
+          invasionKeyword: conflictName,
           negationKeyword: 'conflicting reports',
           startIndex: 0,
           endIndex: 0,
