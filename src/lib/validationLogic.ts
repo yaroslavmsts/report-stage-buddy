@@ -1926,7 +1926,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   
   // Detect ambiguous phrases that require manual verification
   const ambiguityConflicts = detectAmbiguityPhrases(reportText);
-  const allConflicts = [...conflicts, ...ambiguityConflicts];
+  const allConflicts = [...conflicts, ...ambiguityConflicts, ...directInvasionConflicts];
 
   // ============================================
   // pT4 ANATOMICAL OVERRIDE DETECTION
