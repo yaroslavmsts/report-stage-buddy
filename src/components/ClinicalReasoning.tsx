@@ -103,6 +103,9 @@ function generateClinicalReasoning(
   const hasContralateral = parsedReport.ipsilateralLobeInfo?.isContralateralNodule;
   const hasIpsilateral = parsedReport.ipsilateralLobeInfo?.isDifferentLobesSameLung;
   const hasSameLobe = parsedReport.ipsilateralLobeInfo?.isSameLobeNodule;
+  const hasConflict = parsedReport.hasConflict;
+  const conflicts = parsedReport.conflicts || [];
+  const isProvisional = calculatedResult.confidence?.provisional;
 
   if (hasAnatomicalOverride) {
     const structures = parsedReport.pT4Override.structures.join(', ').toLowerCase();
@@ -116,6 +119,13 @@ function generateClinicalReasoning(
   } else if (hasIpsilateral || hasSameLobe) {
     sentences.push(
       `Central structures and pleural surfaces were evaluated and found to be uninvolved.`
+    );
+  } else if (hasConflict && conflicts.length > 0) {
+    // Uncertain/ambiguous invasion was mentioned but not confirmed
+    const structureNames = [...new Set(conflicts.map(c => c.invasionKeyword))];
+    const structureLabel = structureNames.join(' / ');
+    sentences.push(
+      `Possible ${structureLabel} involvement was mentioned, but the wording was uncertain and did not support a confirmed override. Size-based staging was used provisionally.`
     );
   } else {
     sentences.push(
