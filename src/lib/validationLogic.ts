@@ -670,10 +670,13 @@ export function detectPT4Structures(
         if (isBridge && isBridgeSentenceNegated(match[0])) {
           continue; // Negated bridge — skip
         }
-        // Check if negated via standard negation
-        if (!isNegatedFinding(key.replace(/_/g, ' '), text)) {
-          detectedStructures.push(config.display);
-          break;
+        // Check if negated via match-index-based negation
+        if (!isNegated(text, match.index)) {
+          // Also check via legacy isNegatedFinding for backward compat
+          if (!isNegatedFinding(key.replace(/_/g, ' '), text)) {
+            detectedStructures.push(config.display);
+            break;
+          }
         }
       }
     }
