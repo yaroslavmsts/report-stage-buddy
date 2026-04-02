@@ -1781,7 +1781,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
         }
 
         // Check negation via window-based detection
-        const negatedByWindow = isNegated(text, absoluteIndex);
+        const negatedByWindow = isNegated(text, absoluteIndex, match[0].length);
 
         if (negatedByWindow) {
           hasNegation = true;
