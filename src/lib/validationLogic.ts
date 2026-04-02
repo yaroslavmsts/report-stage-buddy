@@ -348,8 +348,10 @@ const NEGATION_WINDOW_WORDS = [
 // Post-match negation phrases (e.g., "invasion not identified", "invasion is absent")
 const POST_NEGATION_PHRASES = [
   'not identified', 'not seen', 'not present', 'not detected',
+  'is not identified', 'is not seen', 'is not present', 'is not detected',
   'is absent', 'are absent', 'is negative', 'is intact', 'are intact',
-  'absent', 'negative',
+  'absent', 'negative', 'was not identified', 'was not seen', 'was not present',
+  'was not detected', 'was absent', 'was negative',
 ];
 
 export function isNegated(text: string, matchIndex: number, matchLength?: number): boolean {
