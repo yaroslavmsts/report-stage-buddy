@@ -139,9 +139,15 @@ function generateClinicalReasoning(
       ? `${calculatedResult.n_category === 'pN0' ? 'negative' : 'positive'} nodal status`
       : 'negative nodal status';
 
-    sentences.push(
-      `The overall findings confirm a Stage ${calculatedResult.stage_group} classification with ${nodalLabel}.`
-    );
+    if (isProvisional || (hasConflict && conflicts.length > 0)) {
+      sentences.push(
+        `The overall findings yield a provisional Stage ${calculatedResult.stage_group} classification with ${nodalLabel}. Clinical correlation is recommended to resolve uncertain findings.`
+      );
+    } else {
+      sentences.push(
+        `The overall findings confirm a Stage ${calculatedResult.stage_group} classification with ${nodalLabel}.`
+      );
+    }
   }
 
   return sentences;
