@@ -1737,44 +1737,66 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   };
 
   for (const [key, config] of Object.entries(directInvasionPatterns)) {
-    let isPositive = false;
-    let matchedPattern = false;
+    let hasPositive = false;
+    let hasNegation = false;
     
     for (const pattern of config.patterns) {
-      const match = pattern.exec(text);
-      if (match) {
-        matchedPattern = true;
+      const re = new RegExp(pattern.source, pattern.flags.replace('g', ''));
+      let searchText = text;
+      let offset = 0;
+
+      // Find ALL occurrences of this pattern in the text
+      while (searchText.length > 0) {
+        const match = re.exec(searchText);
+        if (!match) break;
+
+        const absoluteIndex = offset + match.index;
 
         // For bridge patterns, apply sentence-level negation check
         const isBridge = pattern.source.includes('[^.]{0,80}');
         if (isBridge && isBridgeSentenceNegatedLocal(match[0])) {
-          break; // Negated bridge — skip this structure
+          offset += match.index + match[0].length;
+          searchText = text.substring(offset);
+          continue;
         }
-        
-        // Check if this finding is negated
-        let isNegated = false;
-        for (const keyword of config.keywords) {
-          if (isNegatedFinding(keyword, text)) {
-            isNegated = true;
-            break;
-          }
-        }
-        
-        if (!isNegated) {
-          isPositive = true;
+
+        // Check negation via window-based detection
+        const negatedByWindow = isNegated(text, absoluteIndex);
+
+        if (negatedByWindow) {
+          hasNegation = true;
         } else {
-          // Log the negated finding
-          const displayName = key.replace(/_/g, ' ');
-          extractedText.histologyFindings.push(`${displayName}: negative for invasion`);
+          hasPositive = true;
         }
-        break;
+
+        // Move past this match
+        offset += match.index + match[0].length;
+        searchText = text.substring(offset);
       }
     }
-    
-    if (isPositive) {
+
+    // POSITIVE ALWAYS WINS
+    if (hasPositive) {
       inputs.direct_invasion[key as keyof typeof inputs.direct_invasion] = true;
       const displayName = key.replace(/_/g, ' ');
       extractedText.histologyFindings.push(`Direct invasion: ${displayName}`);
+
+      // If both positive and negated exist, add a conflict
+      if (hasNegation) {
+        const displayName = key.replace(/_/g, ' ');
+        allConflicts.push({
+          sentence: `Conflicting ${displayName} findings: both positive and negative mentions detected`,
+          invasionKeyword: displayName,
+          negationKeyword: 'conflicting reports',
+          startIndex: 0,
+          endIndex: 0,
+          conflictType: 'ambiguity'
+        });
+      }
+    } else if (hasNegation) {
+      // Only negated — log as negative
+      const displayName = key.replace(/_/g, ' ');
+      extractedText.histologyFindings.push(`${displayName}: negative for invasion`);
     }
   }
 
