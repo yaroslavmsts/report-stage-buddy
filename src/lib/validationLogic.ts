@@ -345,25 +345,57 @@ const NEGATION_WINDOW_WORDS = [
  * Returns true if the match at `matchIndex` in `text` is preceded by a negation term
  * within a window of ~5 words (roughly 60 chars) before the match start.
  */
-export function isNegated(text: string, matchIndex: number): boolean {
+// Post-match negation phrases (e.g., "invasion not identified", "invasion is absent")
+const POST_NEGATION_PHRASES = [
+  'not identified', 'not seen', 'not present', 'not detected',
+  'is not identified', 'is not seen', 'is not present', 'is not detected',
+  'is absent', 'are absent', 'is negative', 'is intact', 'are intact',
+  'absent', 'negative', 'was not identified', 'was not seen', 'was not present',
+  'was not detected', 'was absent', 'was negative',
+];
+
+export function isNegated(text: string, matchIndex: number, matchLength?: number): boolean {
   const windowStart = Math.max(0, matchIndex - 60);
   const precedingText = text.substring(windowStart, matchIndex).toLowerCase();
 
+  // Only consider text in the SAME sentence — find last sentence boundary
+  const lastBoundary = Math.max(
+    precedingText.lastIndexOf('.'),
+    precedingText.lastIndexOf('!'),
+    precedingText.lastIndexOf('?'),
+    precedingText.lastIndexOf('\n')
+  );
+  const sameSentenceText = lastBoundary >= 0 ? precedingText.substring(lastBoundary + 1) : precedingText;
+
   // Check multi-word negation phrases (substring match is safe for these)
   for (const phrase of NEGATION_WINDOW_PHRASES) {
-    if (precedingText.includes(phrase)) {
+    if (sameSentenceText.includes(phrase)) {
       return true;
     }
   }
 
   // Check single-word negation terms with word-boundary safety
-  // Split preceding text into words and check the last ~5 words
-  const words = precedingText.trim().split(/\s+/);
+  const words = sameSentenceText.trim().split(/\s+/);
   const lastWords = words.slice(-5);
   for (const word of lastWords) {
     const cleaned = word.replace(/[^a-z]/g, '');
     if (NEGATION_WINDOW_WORDS.includes(cleaned)) {
       return true;
+    }
+  }
+
+  // Check POST-MATCH window for trailing negation (e.g., "invasion not identified")
+  if (matchLength !== undefined) {
+    const postStart = matchIndex + matchLength;
+    const postEnd = Math.min(text.length, postStart + 40);
+    const followingText = text.substring(postStart, postEnd).toLowerCase();
+    // Only consider up to next sentence boundary
+    const nextBoundary = followingText.search(/[.!?\n]/);
+    const sameSentencePost = (nextBoundary >= 0 ? followingText.substring(0, nextBoundary) : followingText).trim();
+    for (const phrase of POST_NEGATION_PHRASES) {
+      if (sameSentencePost.startsWith(phrase) || sameSentencePost.startsWith(': ' + phrase)) {
+        return true;
+      }
     }
   }
 
@@ -676,23 +708,49 @@ export function detectPT4Structures(
   };
 
   for (const [key, config] of Object.entries(pT4Patterns)) {
+    let hasPositive = false;
+    let hasNegation = false;
+
     for (const pattern of config.patterns) {
-      const match = pattern.exec(text);
-      if (match) {
+      // Reset lastIndex for global-safe usage
+      const re = new RegExp(pattern.source, pattern.flags.replace('g', ''));
+      let searchText = text;
+      let offset = 0;
+
+      // Find ALL occurrences of this pattern in the text
+      while (searchText.length > 0) {
+        const match = re.exec(searchText);
+        if (!match) break;
+
+        const absoluteIndex = offset + match.index;
+
         // For bridge patterns, apply sentence-level negation check
         const isBridge = pattern.source.includes('[^.]{0,80}');
         if (isBridge && isBridgeSentenceNegated(match[0])) {
-          continue; // Negated bridge — skip
+          // Move past this match
+          offset += match.index + match[0].length;
+          searchText = text.substring(offset);
+          continue;
         }
-        // Check if negated via match-index-based negation
-        if (!isNegated(text, match.index)) {
-          // Also check via legacy isNegatedFinding for backward compat
-          if (!isNegatedFinding(key.replace(/_/g, ' '), text)) {
-            detectedStructures.push(config.display);
-            break;
-          }
+
+        // Check if this specific occurrence is negated
+        const negatedByWindow = isNegated(text, absoluteIndex, match[0].length);
+        
+        if (negatedByWindow) {
+          hasNegation = true;
+        } else {
+          hasPositive = true;
         }
+
+        // Move past this match to find more
+        offset += match.index + match[0].length;
+        searchText = text.substring(offset);
       }
+    }
+
+    // POSITIVE ALWAYS WINS: if any positive occurrence exists, detect it
+    if (hasPositive) {
+      detectedStructures.push(config.display);
     }
   }
   
@@ -1710,45 +1768,67 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     return false;
   };
 
+  const directInvasionConflicts: ConflictInfo[] = [];
   for (const [key, config] of Object.entries(directInvasionPatterns)) {
-    let isPositive = false;
-    let matchedPattern = false;
+    let hasPositive = false;
+    let hasNegation = false;
     
     for (const pattern of config.patterns) {
-      const match = pattern.exec(text);
-      if (match) {
-        matchedPattern = true;
+      const re = new RegExp(pattern.source, pattern.flags.replace('g', ''));
+      let searchText = text;
+      let offset = 0;
+
+      // Find ALL occurrences of this pattern in the text
+      while (searchText.length > 0) {
+        const match = re.exec(searchText);
+        if (!match) break;
+
+        const absoluteIndex = offset + match.index;
 
         // For bridge patterns, apply sentence-level negation check
         const isBridge = pattern.source.includes('[^.]{0,80}');
         if (isBridge && isBridgeSentenceNegatedLocal(match[0])) {
-          break; // Negated bridge — skip this structure
+          offset += match.index + match[0].length;
+          searchText = text.substring(offset);
+          continue;
         }
-        
-        // Check if this finding is negated
-        let isNegated = false;
-        for (const keyword of config.keywords) {
-          if (isNegatedFinding(keyword, text)) {
-            isNegated = true;
-            break;
-          }
-        }
-        
-        if (!isNegated) {
-          isPositive = true;
+
+        // Check negation via window-based detection
+        const negatedByWindow = isNegated(text, absoluteIndex, match[0].length);
+
+        if (negatedByWindow) {
+          hasNegation = true;
         } else {
-          // Log the negated finding
-          const displayName = key.replace(/_/g, ' ');
-          extractedText.histologyFindings.push(`${displayName}: negative for invasion`);
+          hasPositive = true;
         }
-        break;
+
+        // Move past this match
+        offset += match.index + match[0].length;
+        searchText = text.substring(offset);
       }
     }
-    
-    if (isPositive) {
+
+    // POSITIVE ALWAYS WINS
+    if (hasPositive) {
       inputs.direct_invasion[key as keyof typeof inputs.direct_invasion] = true;
       const displayName = key.replace(/_/g, ' ');
       extractedText.histologyFindings.push(`Direct invasion: ${displayName}`);
+
+      if (hasNegation) {
+        const conflictName = key.replace(/_/g, ' ');
+        directInvasionConflicts.push({
+          sentence: `Conflicting ${conflictName} findings: both positive and negative mentions detected`,
+          invasionKeyword: conflictName,
+          negationKeyword: 'conflicting reports',
+          startIndex: 0,
+          endIndex: 0,
+          conflictType: 'ambiguity'
+        });
+      }
+    } else if (hasNegation) {
+      // Only negated — log as negative
+      const displayName = key.replace(/_/g, ' ');
+      extractedText.histologyFindings.push(`${displayName}: negative for invasion`);
     }
   }
 
@@ -1878,7 +1958,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   
   // Detect ambiguous phrases that require manual verification
   const ambiguityConflicts = detectAmbiguityPhrases(reportText);
-  const allConflicts = [...conflicts, ...ambiguityConflicts];
+  const allConflicts = [...conflicts, ...ambiguityConflicts, ...directInvasionConflicts];
 
   // ============================================
   // pT4 ANATOMICAL OVERRIDE DETECTION
