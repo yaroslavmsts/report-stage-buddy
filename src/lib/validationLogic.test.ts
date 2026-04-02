@@ -1464,3 +1464,63 @@ describe('pT4 negation in full pipeline', () => {
     expect(result.t_category).toContain('pT4');
   });
 });
+
+describe('Positive-over-negation conflict resolution', () => {
+  it('mixed negated + positive chest wall → pT3 with conflict', () => {
+    const text = 'Adenocarcinoma, greatest dimension 2.5 cm. No chest wall invasion. Tumor invades chest wall. Lymph nodes negative.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).toContain('pT3');
+    expect(parsed.hasConflict).toBe(true);
+  });
+
+  it('positive-only chest wall → pT3 no conflict', () => {
+    const text = 'Adenocarcinoma, greatest dimension 2.5 cm. Tumor invades chest wall. Lymph nodes negative.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).toContain('pT3');
+  });
+
+  it('negated-only chest wall → size-based T', () => {
+    const text = 'Adenocarcinoma, greatest dimension 2.5 cm. No chest wall invasion. Lymph nodes negative.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).not.toContain('pT3');
+    expect(result.t_category).toContain('pT1');
+  });
+
+  it('mixed negated + positive mediastinum → pT4 with conflict', () => {
+    const text = 'Adenocarcinoma, greatest dimension 2.5 cm. No mediastinal invasion. Tumor invades mediastinum. Lymph nodes negative.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).toContain('pT4');
+  });
+
+  it('negated-only mediastinum → no pT4', () => {
+    const text = 'Adenocarcinoma, greatest dimension 2.5 cm. No mediastinal invasion. Lymph nodes negative.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.t_category).not.toContain('pT4');
+  });
+
+  it('post-match negation "phrenic nerve invasion not identified" → absent', () => {
+    const text = 'Adenocarcinoma, greatest dimension 2.5 cm. Phrenic nerve invasion not identified. Lymph nodes negative.';
+    const parsed = parsePathologyReport(text);
+    expect(parsed.inputs.direct_invasion.phrenic_nerve).toBe(false);
+  });
+
+  it('positive chest wall with negated phrenic → only chest wall detected', () => {
+    const text = 'Adenocarcinoma, greatest dimension 2.5 cm. Tumor invades chest wall. No phrenic nerve invasion. Lymph nodes negative.';
+    const parsed = parsePathologyReport(text);
+    expect(parsed.inputs.direct_invasion.chest_wall).toBe(true);
+    expect(parsed.inputs.direct_invasion.phrenic_nerve).toBe(false);
+  });
+
+  it('confidence reduced when positive+negated conflict exists', () => {
+    const text = 'Adenocarcinoma, greatest dimension 2.5 cm. No chest wall invasion. Tumor invades chest wall. Lymph nodes negative. No distant metastasis.';
+    const parsed = parsePathologyReport(text);
+    const result = runValidation(parsed);
+    expect(result.confidence).toBeDefined();
+    expect(result.confidence!.provisional).toBe(true);
+  });
+});
