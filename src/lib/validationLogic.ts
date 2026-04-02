@@ -358,16 +358,24 @@ export function isNegated(text: string, matchIndex: number, matchLength?: number
   const windowStart = Math.max(0, matchIndex - 60);
   const precedingText = text.substring(windowStart, matchIndex).toLowerCase();
 
+  // Only consider text in the SAME sentence — find last sentence boundary
+  const lastBoundary = Math.max(
+    precedingText.lastIndexOf('.'),
+    precedingText.lastIndexOf('!'),
+    precedingText.lastIndexOf('?'),
+    precedingText.lastIndexOf('\n')
+  );
+  const sameSentenceText = lastBoundary >= 0 ? precedingText.substring(lastBoundary + 1) : precedingText;
+
   // Check multi-word negation phrases (substring match is safe for these)
   for (const phrase of NEGATION_WINDOW_PHRASES) {
-    if (precedingText.includes(phrase)) {
+    if (sameSentenceText.includes(phrase)) {
       return true;
     }
   }
 
   // Check single-word negation terms with word-boundary safety
-  // Split preceding text into words and check the last ~5 words
-  const words = precedingText.trim().split(/\s+/);
+  const words = sameSentenceText.trim().split(/\s+/);
   const lastWords = words.slice(-5);
   for (const word of lastWords) {
     const cleaned = word.replace(/[^a-z]/g, '');
@@ -380,9 +388,12 @@ export function isNegated(text: string, matchIndex: number, matchLength?: number
   if (matchLength !== undefined) {
     const postStart = matchIndex + matchLength;
     const postEnd = Math.min(text.length, postStart + 40);
-    const followingText = text.substring(postStart, postEnd).toLowerCase().trim();
+    const followingText = text.substring(postStart, postEnd).toLowerCase();
+    // Only consider up to next sentence boundary
+    const nextBoundary = followingText.search(/[.!?\n]/);
+    const sameSentencePost = (nextBoundary >= 0 ? followingText.substring(0, nextBoundary) : followingText).trim();
     for (const phrase of POST_NEGATION_PHRASES) {
-      if (followingText.startsWith(phrase) || followingText.startsWith(' ' + phrase) || followingText.startsWith(': ' + phrase) || followingText.startsWith(' is ' + phrase.replace('is ', ''))) {
+      if (sameSentencePost.startsWith(phrase) || sameSentencePost.startsWith(': ' + phrase)) {
         return true;
       }
     }
