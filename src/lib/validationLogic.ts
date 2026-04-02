@@ -332,11 +332,13 @@ const BRIDGE_NEGATION_PHRASES = [
   'does not invade', 'did not invade', 'no sign of', 'is intact', 'are intact',
 ];
 
-// NEGATION TERMS for proximity-based negation detection
-const NEGATION_WINDOW_TERMS = [
-  'no', 'not', 'without', 'negative for', 'absence of', 'free of', 'denies',
-  'no evidence of', 'no sign of', 'absent', 'negative', 'intact',
-  'does not', 'did not', 'do not', 'unremarkable',
+// NEGATION PHRASES for proximity-based negation detection (multi-word first, then single-word)
+const NEGATION_WINDOW_PHRASES = [
+  'no evidence of', 'no sign of', 'negative for', 'absence of', 'free of',
+  'does not', 'did not', 'do not',
+];
+const NEGATION_WINDOW_WORDS = [
+  'no', 'not', 'without', 'denies', 'absent', 'negative', 'intact', 'unremarkable',
 ];
 
 /**
@@ -347,12 +349,24 @@ export function isNegated(text: string, matchIndex: number): boolean {
   const windowStart = Math.max(0, matchIndex - 60);
   const precedingText = text.substring(windowStart, matchIndex).toLowerCase();
 
-  // Check multi-word negation phrases first
-  for (const term of NEGATION_WINDOW_TERMS) {
-    if (precedingText.includes(term)) {
+  // Check multi-word negation phrases (substring match is safe for these)
+  for (const phrase of NEGATION_WINDOW_PHRASES) {
+    if (precedingText.includes(phrase)) {
       return true;
     }
   }
+
+  // Check single-word negation terms with word-boundary safety
+  // Split preceding text into words and check the last ~5 words
+  const words = precedingText.trim().split(/\s+/);
+  const lastWords = words.slice(-5);
+  for (const word of lastWords) {
+    const cleaned = word.replace(/[^a-z]/g, '');
+    if (NEGATION_WINDOW_WORDS.includes(cleaned)) {
+      return true;
+    }
+  }
+
   return false;
 }
 
