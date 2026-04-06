@@ -469,7 +469,7 @@ function isNegatedOrganMention(text: string, matchIndex: number): boolean {
 function countOrgansWithMets(text: string): Set<string> {
   const normalizedText = text.toLowerCase();
   const organs = new Set<string>();
-  const hasMetContext = /metastas|mets?\b/i.test(normalizedText);
+  const hasMetContext = /metastas|metastatic|mets?\b/i.test(normalizedText);
   if (!hasMetContext) return organs;
 
   const organPatterns: Array<{ name: string; pattern: RegExp }> = [

@@ -2088,6 +2088,23 @@ describe('M1c1 vs M1c2 negation-aware organ counting', () => {
     const result = runValidation(parsed);
     expect(result.m_category).toBe('pM1c2');
   });
+
+  it('compound metastasis phrasing: "metastatic disease involving liver and osseous structures" → pM1c2', () => {
+    const report = 'Left upper lobe lobectomy. Adenocarcinoma, 2.8 cm. Metastatic disease involving liver and osseous structures. Lymph nodes negative.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.t_category).toBe('pT1c');
+    expect(result.n_category).toBe('pN0');
+    expect(result.m_category).toBe('pM1c2');
+    expect(result.stage_group).toBe('Stage IVB');
+  });
+
+  it('multiple liver metastases (single organ) → pM1c1', () => {
+    const report = 'Right lower lobe resection. Adenocarcinoma, 3.0 cm. Multiple liver metastases. Lymph nodes negative.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.m_category).toBe('pM1c1');
+  });
 });
 
 describe('Biopsy specimen pNx detection', () => {
