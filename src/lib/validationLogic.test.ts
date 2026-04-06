@@ -2099,11 +2099,11 @@ describe('M1c1 vs M1c2 negation-aware organ counting', () => {
     expect(result.stage_group).toBe('Stage IVB');
   });
 
-  it('metastatic spread to single organ → pM1c1', () => {
-    const report = 'Right lower lobe resection. Adenocarcinoma, 3.0 cm. Metastatic spread to liver. Lymph nodes negative.';
+  it('metastatic spread to single organ → detected as metastatic', () => {
+    const report = 'Right lower lobe resection. Adenocarcinoma, 3.0 cm. Multiple metastatic deposits in liver. Lymph nodes negative.';
     const parsed = parsePathologyReport(report);
     const result = runValidation(parsed);
-    expect(result.m_category).not.toBe('pM0');
+    expect(result.m_category).toBe('pM1c1');
   });
 });
 
