@@ -2925,7 +2925,7 @@ ${gateDetail}`;
       /(?:underlying|adjacent)\s+ribs?\b/i,
     ];
     const isBridgeNegatedInSentence = (matchText: string): boolean => {
-      const lowerRaw = rawText.toLowerCase();
+      const lowerRaw = textForDetection.toLowerCase();
       const sentences = lowerRaw.split(/[.!?]/);
       for (const sentence of sentences) {
         if (sentence.includes(matchText.toLowerCase().substring(0, 20))) {
@@ -2938,14 +2938,14 @@ ${gateDetail}`;
     for (const pattern of intercostalPatterns) {
       const isIntercostalPattern = pattern.source.includes('intercostal');
       const negationTerm = isIntercostalPattern ? 'intercostal' : 'rib';
-      const match = pattern.exec(rawText.toLowerCase());
+      const match = pattern.exec(textForDetection.toLowerCase());
       if (match) {
         // Bridge negation safety
         const isBridge = pattern.source.includes('[^.]{0,80}');
         if (isBridge && isBridgeNegatedInSentence(match[0])) {
           continue;
         }
-        if (!isNegatedFindingLocal(negationTerm, rawText)) {
+        if (!isNegatedFindingLocal(negationTerm, textForDetection)) {
           gate1Triggered = true;
           gate1Stage = 'pT3';
           gate1Detail = 'Intercostal muscle/rib invasion → pT3';
