@@ -2150,3 +2150,45 @@ describe('Default N fallback is pNx (no nodal mention at all)', () => {
     expect(result.n_category).toBe('pN0');
   });
 });
+
+describe('pNx provisional staging', () => {
+  it('pT1b / pNx / pM0 → Stage IA2 provisional', () => {
+    const parsed = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 1.5 cm. No distant metastasis.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pNx');
+    expect(result.stage_group).toContain('IA2');
+    expect(result.stage_provisional).toBe(true);
+    expect(result.stage_provisional_note).toContain('pNx');
+  });
+
+  it('pT2a / pNx / pM0 → Stage IB provisional', () => {
+    const parsed = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 3.5 cm. No distant metastasis.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pNx');
+    expect(result.stage_group).toContain('IB');
+    expect(result.stage_provisional).toBe(true);
+  });
+
+  it('pT3 / pNx / pM0 → Stage IIB provisional', () => {
+    const parsed = parsePathologyReport('Left lower lobe resection. Squamous cell carcinoma, 2.2 cm. Tumour invades the thoracic wall. No distant metastasis.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pNx');
+    expect(result.stage_group).toContain('IIB');
+    expect(result.stage_provisional).toBe(true);
+  });
+
+  it('pT1b / pN0 / pM0 → Stage IA2 NOT provisional', () => {
+    const parsed = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 1.5 cm. Lymph nodes negative (0/8). No distant metastasis.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pN0');
+    expect(result.stage_group).toContain('IA2');
+    expect(result.stage_provisional).toBeFalsy();
+  });
+
+  it('pNx with M1a → Stage IVA, NOT provisional (M1 overrides)', () => {
+    const parsed = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 1.5 cm. Malignant pleural effusion.');
+    const result = runValidation(parsed);
+    expect(result.stage_group).toContain('IVA');
+    expect(result.stage_provisional).toBeFalsy();
+  });
+});
