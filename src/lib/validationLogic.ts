@@ -157,6 +157,8 @@ export interface ValidationResult {
   n_category: string | null;
   m_category: string | null;
   stage_group: string | null;
+  stage_provisional?: boolean;
+  stage_provisional_note?: string;
   survival: SurvivalData | null;
   icd10: ICD10Code | null;
   n2SubclassAlert?: string;
