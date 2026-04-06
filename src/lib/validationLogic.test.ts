@@ -2059,3 +2059,63 @@ describe('pNx detection — nodes not submitted', () => {
     expect(result.n_category).toBe('pN0');
   });
 });
+
+describe('M1c1 vs M1c2 negation-aware organ counting', () => {
+  it('multiple hepatic mets with negated bone/brain → pM1c1', () => {
+    const report = 'Left upper lobe lobectomy. Adenocarcinoma, 3.0 cm. Multiple hepatic metastases. No bone or brain involvement. Lymph nodes negative.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.m_category).toBe('pM1c1');
+  });
+
+  it('liver and bone metastases (both positive) → pM1c2', () => {
+    const report = 'Right lower lobe resection. Squamous cell carcinoma, 4.0 cm. Liver and bone metastases identified. Lymph nodes negative.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.m_category).toBe('pM1c2');
+  });
+
+  it('multiple brain metastases only → pM1c1', () => {
+    const report = 'Left upper lobe lobectomy. Adenocarcinoma, 2.5 cm. Multiple brain metastases. No liver metastasis. Lymph nodes negative.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.m_category).toBe('pM1c1');
+  });
+
+  it('brain and adrenal metastases → pM1c2', () => {
+    const report = 'Right lower lobe resection. Adenocarcinoma, 3.0 cm. Brain and adrenal metastases. Lymph nodes negative.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.m_category).toBe('pM1c2');
+  });
+});
+
+describe('Biopsy specimen pNx detection', () => {
+  it('biopsy with no nodal info → pNx', () => {
+    const report = 'CT-guided core biopsy of right upper lobe mass. Adenocarcinoma. No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pNx');
+  });
+
+  it('biopsy with explicit nodal staging → not pNx', () => {
+    const report = 'Transbronchial biopsy. Adenocarcinoma, 2.0 cm. Station 7 lymph node positive (1/3). No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.n_category).not.toBe('pNx');
+  });
+
+  it('biopsy with "lymph nodes negative" → pN0 (not pNx)', () => {
+    const report = 'Wedge biopsy of left lower lobe. Squamous cell carcinoma, 1.5 cm. Lymph nodes negative. No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pN0');
+  });
+
+  it('needle biopsy with no mention of nodes → pNx', () => {
+    const report = 'Fine needle aspiration of right lung mass. Adenocarcinoma confirmed.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pNx');
+  });
+});
