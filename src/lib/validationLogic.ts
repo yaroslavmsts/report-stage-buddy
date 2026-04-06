@@ -234,6 +234,7 @@ export interface ParsedReport {
   reportedNStage: string | null;
   reportedMStage: string | null;
   rawText: string;
+  normalizedText: string;
   conflicts: ConflictInfo[];
   hasConflict: boolean;
   nodalStationAlerts: NodalStationAlert[];
@@ -1303,7 +1304,8 @@ export function detectMultiplePrimaryTumors(reportText: string): boolean {
   return false;
 }
 export function parsePathologyReport(reportText: string): ParsedReport {
-  const text = normalizeReportText(reportText).toLowerCase();
+  const normalizedText = normalizeReportText(reportText);
+  const text = normalizedText.toLowerCase();
   
   // Initialize default inputs
   const inputs: ValidationInputs = {
@@ -1958,19 +1960,19 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   }
 
   // Extract lymph node findings for pN calculation
-  const lymphNodeResult = getNodeStage(reportText);
+  const lymphNodeResult = getNodeStage(normalizedText);
   if (lymphNodeResult) {
     extractedText.lymphNodeFindings.push(`${lymphNodeResult.stage}: ${lymphNodeResult.criteria}`);
   }
 
   // Extract metastasis findings for pM calculation
-  const metastasisResult = getMetastasisStage(reportText);
+  const metastasisResult = getMetastasisStage(normalizedText);
   if (metastasisResult) {
     extractedText.metastasisFindings.push(`${metastasisResult.stage}: ${metastasisResult.criteria}`);
   }
 
   // Extract tumor site for ICD-10
-  const icd10Result = getICD10Code(reportText);
+  const icd10Result = getICD10Code(normalizedText);
   extractedText.siteFindings.push(`${icd10Result.site} (${icd10Result.code})`);
 
   // ============================================
@@ -2031,7 +2033,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   // ============================================
   // IPSILATERAL LOBE NODULE DETECTION - Different lobe same lung = pT4
   // ============================================
-  const ipsilateralLobeInfo = detectIpsilateralLobeNodules(reportText);
+  const ipsilateralLobeInfo = detectIpsilateralLobeNodules(normalizedText);
 
   // ============================================
   // BUILD TRIGGER EVIDENCE
