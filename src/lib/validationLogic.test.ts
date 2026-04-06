@@ -1816,6 +1816,101 @@ Lymph nodes: level 4L positive (1/2).`;
   });
 
   // ----------------------------------------------------------
+  // Stage group table: AJCC 9th Edition regression
+  // ----------------------------------------------------------
+  describe('Stage group table: AJCC 9th Edition regression', () => {
+    it('T3/N0/M0 → Stage IIB (was returning IIIB — confirmed bug)', () => {
+      const r = run('Squamous cell carcinoma 2.2 cm. Thoracic wall invasion. Lymph nodes negative. No distant metastasis.');
+      expect(r.stage_group).toBe('Stage IIB');
+    });
+
+    it('T1a/N0/M0 → Stage IA1', () => {
+      const r = run('Adenocarcinoma 0.8 cm. No pleural invasion. Lymph nodes negative. No distant metastasis.');
+      expect(r.stage_group).toBe('Stage IA1');
+    });
+
+    it('T2a/N0/M0 → Stage IB', () => {
+      const r = run('Squamous cell carcinoma 3.5 cm. No invasion. Lymph nodes negative. No distant metastasis.');
+      expect(r.stage_group).toBe('Stage IB');
+    });
+
+    it('T2b/N0/M0 → Stage IIA', () => {
+      const r = run('Adenocarcinoma 4.5 cm. No invasion. Lymph nodes negative. No distant metastasis.');
+      expect(r.stage_group).toBe('Stage IIA');
+    });
+
+    it('T2b/N1/M0 → Stage IIB', () => {
+      const r = run('Adenocarcinoma 4.5 cm. Hilar lymph node positive (1/2). No distant metastasis.');
+      expect(r.stage_group).toBe('Stage IIB');
+    });
+
+    it('T1c/N2a/M0 → Stage IIB (key 9th edition downstage)', () => {
+      const r = run('Adenocarcinoma 2.5 cm. Level 7 lymph node positive (1/3). No distant metastasis.');
+      expect(r.stage_group).toBe('Stage IIB');
+    });
+
+    it('T3/N1/M0 → Stage IIIA', () => {
+      const r = run('Squamous cell carcinoma 2.0 cm. Chest wall invasion. Hilar lymph node positive (1/1). No distant metastasis.');
+      expect(r.stage_group).toBe('Stage IIIA');
+    });
+
+    it('T4/N0/M0 → Stage IIIA', () => {
+      const r = run('Adenocarcinoma 3.0 cm. Mediastinal invasion. Lymph nodes negative. No distant metastasis.');
+      expect(r.stage_group).toBe('Stage IIIA');
+    });
+
+    it('T2a/N2b/M0 → Stage IIIB', () => {
+      const r = run('Adenocarcinoma 3.5 cm. Level 4R and level 7 lymph nodes positive. No distant metastasis.');
+      expect(r.stage_group).toBe('Stage IIIB');
+    });
+
+    it('T4/N2a/M0 → Stage IIIB', () => {
+      const r = run('Squamous cell carcinoma 8.0 cm. Mediastinal invasion. Level 7 lymph node positive (2/3). No distant metastasis.');
+      expect(r.stage_group).toBe('Stage IIIB');
+    });
+
+    it('T3/N2b/M0 → Stage IIIC', () => {
+      const r = run('Squamous cell carcinoma 5.5 cm. Chest wall invasion. Level 4L and level 7 positive. No distant metastasis.');
+      expect(r.stage_group).toBe('Stage IIIC');
+    });
+
+    it('T4/N3/M0 → Stage IIIC', () => {
+      const r = run('Adenocarcinoma 8.5 cm. Mediastinal invasion. Contralateral mediastinal lymph node positive. No distant metastasis.');
+      expect(r.stage_group).toBe('Stage IIIC');
+    });
+
+    it('any/any/M1a → Stage IVA', () => {
+      const r = run('Adenocarcinoma 2.0 cm. Contralateral lung nodule. Lymph nodes negative.');
+      expect(r.stage_group).toBe('Stage IVA');
+    });
+
+    it('any/any/M1b → Stage IVA', () => {
+      const r = run('Adenocarcinoma 2.0 cm. Single brain metastasis. Lymph nodes negative.');
+      expect(r.stage_group).toBe('Stage IVA');
+    });
+
+    it('any/any/M1c1 → Stage IVB', () => {
+      const r = run('Adenocarcinoma 2.0 cm. Multiple liver metastases. Lymph nodes negative.');
+      expect(r.stage_group).toBe('Stage IVB');
+    });
+
+    it('any/any/M1c2 → Stage IVB', () => {
+      const r = run('Adenocarcinoma 2.0 cm. Liver and bone metastases. Lymph nodes negative.');
+      expect(r.stage_group).toBe('Stage IVB');
+    });
+
+    it('Stage IIB survival is 60%', () => {
+      const r = run('Squamous cell carcinoma 2.2 cm. Thoracic wall invasion. Lymph nodes negative. No distant metastasis.');
+      expect(r.survival?.five_year_survival).toBe('60%');
+    });
+
+    it('Stage IIIC survival is 13%', () => {
+      const r = run('Squamous cell carcinoma 5.5 cm. Chest wall invasion. Level 4L and level 7 positive. No distant metastasis.');
+      expect(r.survival?.five_year_survival).toBe('13%');
+    });
+  });
+
+  // ----------------------------------------------------------
   // COMBINED: all three fixes interact correctly
   // Worst-case report: phrenic nerve (pT3) + two stations (N2b)
   // + contralateral nodule (M1a) — tests full pipeline
