@@ -104,7 +104,7 @@ function getICDOMorphology(parsedReport: ParsedReport): { code: string; descript
   if (text.includes('mucinous adenocarcinoma')) {
     return { code: 'M8480/3', descriptor: 'Mucinous adenocarcinoma' };
   }
-  if (text.includes('adenocarcinoma in situ') || text.includes('ais')) {
+  if (text.includes('adenocarcinoma in situ') || /\bais\b/i.test(text)) {
     return { code: 'M8250/2', descriptor: 'Adenocarcinoma in situ, nonmucinous' };
   }
   if (text.includes('minimally invasive adenocarcinoma') || text.includes('mia')) {
@@ -516,7 +516,25 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
                 {calculatedResult.m_category || 'N/A'}
               </p>
             </div>
-          </div>
+           </div>
+
+          {/* N2/M1c Subclassification Alerts */}
+          {(calculatedResult.n2SubclassAlert || calculatedResult.m1cSubclassAlert) && (
+            <div className="space-y-2">
+              {calculatedResult.n2SubclassAlert && (
+                <div className="p-2 rounded-lg bg-warning/10 border border-warning/30 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-foreground">{calculatedResult.n2SubclassAlert}</p>
+                </div>
+              )}
+              {calculatedResult.m1cSubclassAlert && (
+                <div className="p-2 rounded-lg bg-warning/10 border border-warning/30 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-foreground">{calculatedResult.m1cSubclassAlert}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Reported vs Calculated comparison */}
           <div className="grid grid-cols-2 gap-2 sm:gap-4 border-t pt-3 sm:pt-4">
@@ -694,7 +712,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
           </AlertTitle>
           <AlertDescription className="mt-2 space-y-2">
             <p className="text-sm text-foreground">
-              A separate tumor nodule in a different lobe of the same lung was identified. Per AJCC 8th Edition, this requires pT4 classification.
+              A separate tumor nodule in a different lobe of the same lung was identified. Per AJCC 9th Edition, this requires pT4 classification.
             </p>
             <div className="p-2 rounded bg-destructive/10 border border-destructive/20">
               <div className="flex flex-wrap gap-3 text-xs">
@@ -994,7 +1012,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
       {/* Source Attribution Footer */}
       <div className="text-center pt-2 pb-1">
         <p className="text-[9px] sm:text-[10px] text-muted-foreground/70 leading-relaxed">
-          Survival data and ICD-10 codes sourced from AJCC 8th Edition and PathologyOutlines.com.
+          Survival data and ICD-10 codes sourced from AJCC 9th Edition / IASLC Staging Manual 9th Edition, 2024.
           <br />
           For clinical reference only. Individual outcomes may vary.
         </p>

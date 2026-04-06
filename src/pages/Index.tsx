@@ -5,8 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ValidationResult } from '@/components/ValidationResult';
 import { parsePathologyReport, runValidation, compareStages, getStagingSource } from '@/lib/validationLogic';
 import { STAGING_RULES } from '@/lib/stagingRules';
-import { Loader2, FileText, Shield, AlertTriangle, Database, ChevronDown, HelpCircle } from 'lucide-react';
+import { Loader2, FileText, Shield, AlertTriangle, Database, ChevronDown, HelpCircle, FlaskConical } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +18,35 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+
+const TUMOR_TYPES = [
+  { value: 'nsclc_adeno', label: 'NSCLC — Adenocarcinoma' },
+  { value: 'nsclc_squamous', label: 'NSCLC — Squamous Cell' },
+  { value: 'sclc', label: 'SCLC (Small Cell)' },
+  { value: 'typical_carcinoid', label: 'Typical Carcinoid' },
+  { value: 'atypical_carcinoid', label: 'Atypical Carcinoid' },
+  { value: 'lcnec', label: 'Large Cell Neuroendocrine' },
+  { value: 'other_nsclc', label: 'Other NSCLC' },
+] as const;
+
+type MolecularStatus = 'positive' | 'negative' | 'not_tested';
+type PdL1Status = '<1%' | '1-49%' | '≥50%' | 'not_tested';
+
+interface MolecularMarkers {
+  egfr: MolecularStatus;
+  alk: MolecularStatus;
+  ros1: MolecularStatus;
+  kras: MolecularStatus;
+  pdl1: PdL1Status;
+}
+
+const DEFAULT_MARKERS: MolecularMarkers = {
+  egfr: 'not_tested',
+  alk: 'not_tested',
+  ros1: 'not_tested',
+  kras: 'not_tested',
+  pdl1: 'not_tested',
+};
 
 // Sample reports demonstrating each Golden Rule
 const SAMPLE_REPORTS = {
@@ -373,6 +405,9 @@ const Index = () => {
   const [isValidating, setIsValidating] = useState(false);
   const [isOverridden, setIsOverridden] = useState(false);
   const [overrideTimestamp, setOverrideTimestamp] = useState<string | null>(null);
+  const [tumorType, setTumorType] = useState<string>('nsclc_adeno');
+  const [molecularMarkers, setMolecularMarkers] = useState<MolecularMarkers>(DEFAULT_MARKERS);
+  const [markersOpen, setMarkersOpen] = useState(false);
   const [validationResult, setValidationResult] = useState<{
     comparison: { isMatch: boolean; message: string; details: string };
     calculatedResult: ReturnType<typeof runValidation>;
@@ -470,6 +505,7 @@ const Index = () => {
 
   const handleClear = () => {
     setReportText('');
+    setMolecularMarkers(DEFAULT_MARKERS);
     setValidationResult(null);
     setIsOverridden(false);
     setOverrideTimestamp(null);
@@ -486,7 +522,7 @@ const Index = () => {
             </div>
             <div className="min-w-0 flex-1">
               <h1 className="text-lg sm:text-xl font-bold text-foreground truncate">TNM Staging Validator</h1>
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">CAP Lung 4.0.0.2 • AJCC 8th Edition</p>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">CAP Lung 4.0.0.2 • AJCC 9th Edition (effective Jan 1, 2025)</p>
             </div>
           </div>
         </div>
@@ -508,6 +544,23 @@ const Index = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 sm:space-y-4">
+                {/* Tumor Type Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Tumor Type</label>
+                  <Select value={tumorType} onValueChange={setTumorType}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select tumor type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TUMOR_TYPES.map(t => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground">
+                    AJCC 9th Edition TNM staging applies to all listed types. Not applicable to sarcomas, lymphomas, or mesothelioma.
+                  </p>
+                </div>
                 <Textarea
                   placeholder="Paste your pathology report here..."
                   value={reportText}
@@ -655,7 +708,7 @@ const Index = () => {
                   <div className="text-xs sm:text-sm text-muted-foreground min-w-0 flex-1">
                     <p className="font-medium text-foreground mb-1">Validation Scope</p>
                     <p className="mb-2 text-xs sm:text-sm">
-                      This tool validates T staging for lung adenocarcinoma according to AJCC 8th Edition criteria:
+                      This tool validates T staging for lung cancer (NSCLC, SCLC, carcinoid, LCNEC) according to AJCC 9th Edition criteria:
                     </p>
                     <ul className="space-y-1 text-[10px] sm:text-xs">
                       {STAGING_RULES.rules.map((rule) => (
@@ -698,6 +751,64 @@ const Index = () => {
                   </div>
                 </CardContent>
               </Card>
+            )}
+
+            {/* Molecular Markers (AJCC 9th - optional, display-only) */}
+            {validationResult && (
+              <Collapsible open={markersOpen} onOpenChange={setMarkersOpen}>
+                <Card className="border border-muted">
+                  <CollapsibleTrigger asChild>
+                    <button className="w-full flex items-center gap-2 p-4 text-left hover:bg-muted/50 transition-colors rounded-t-lg">
+                      <FlaskConical className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span className="text-sm font-semibold text-foreground">Molecular Markers</span>
+                      <Badge variant="outline" className="ml-1 text-[10px]">Optional</Badge>
+                      <svg
+                        className={`ml-auto h-4 w-4 text-muted-foreground transition-transform duration-200 ${markersOpen ? 'rotate-180' : ''}`}
+                        xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="pt-0 pb-4 space-y-3">
+                      <p className="text-[10px] text-muted-foreground">Per AJCC 9th Edition, these fields are recorded but do NOT affect stage group.</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {(['egfr', 'alk', 'ros1', 'kras'] as const).map(marker => (
+                          <div key={marker} className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground uppercase">{marker === 'egfr' ? 'EGFR' : marker === 'alk' ? 'ALK' : marker === 'ros1' ? 'ROS1' : 'KRAS'}</label>
+                            <Select
+                              value={molecularMarkers[marker]}
+                              onValueChange={(v) => setMolecularMarkers(prev => ({ ...prev, [marker]: v as MolecularStatus }))}
+                            >
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="not_tested">Not Tested</SelectItem>
+                                <SelectItem value="positive">Positive</SelectItem>
+                                <SelectItem value="negative">Negative</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">PD-L1 TPS</label>
+                        <Select
+                          value={molecularMarkers.pdl1}
+                          onValueChange={(v) => setMolecularMarkers(prev => ({ ...prev, pdl1: v as PdL1Status }))}
+                        >
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="not_tested">Not Tested</SelectItem>
+                            <SelectItem value="<1%">&lt;1%</SelectItem>
+                            <SelectItem value="1-49%">1–49%</SelectItem>
+                            <SelectItem value="≥50%">≥50%</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
             )}
           </div>
         </div>

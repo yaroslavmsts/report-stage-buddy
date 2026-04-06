@@ -1366,21 +1366,24 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   let reportedNStage: string | null = null;
   let reportedMStage: string | null = null;
 
-  // Check for AIS (Adenocarcinoma in situ)
+  // Check for AIS (Adenocarcinoma in situ) — Bug 7: use \bais\b to avoid matching "raises", "metastasis"
   if (
     text.includes('adenocarcinoma in situ') ||
-    /\bais\b/i.test(text) && (text.includes('adenocarcinoma') || text.includes('lepidic')) ||
-    /\bais\b/i.test(text) && text.includes('lepidic pattern')
+    (/\bais\b/i.test(text) && (text.includes('adenocarcinoma') || text.includes('lepidic'))) ||
+    (/\bais\b/i.test(text) && text.includes('lepidic pattern'))
   ) {
     inputs.histology.is_AIS = true;
     extractedText.histologyFindings.push('Adenocarcinoma in situ (AIS) detected');
   }
 
-  // Check for MIA (Minimally invasive adenocarcinoma)
+  // Check for MIA (Minimally invasive adenocarcinoma) — Bug 5: fix operator precedence
   if (
     text.includes('minimally invasive adenocarcinoma') ||
-    text.includes('mia') && text.includes('adenocarcinoma') ||
-    ((text.includes('invasive component') || text.includes('invasive focus')) && (text.includes('≤5mm') || text.includes('<= 5mm') || text.includes('less than 5 mm') || text.includes('≤ 5 mm') || text.includes('0.5 cm')))
+    (text.includes('mia') && text.includes('adenocarcinoma')) ||
+    (
+      (text.includes('invasive component') || text.includes('invasive focus')) &&
+      (text.includes('≤5mm') || text.includes('<= 5mm') || text.includes('less than 5 mm') || text.includes('≤ 5 mm') || text.includes('0.5 cm'))
+    )
   ) {
     inputs.histology.is_MIA = true;
     extractedText.histologyFindings.push('Minimally invasive adenocarcinoma (MIA) detected');
