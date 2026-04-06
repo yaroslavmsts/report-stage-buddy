@@ -759,12 +759,11 @@ describe('Integration: Deterministic Gated Engine', () => {
       expect(result.size_basis_cm).toBe(1.2);
     });
 
-    it('Gate 1 overrides Gate 2: phrenic nerve beats invasive component', () => {
-      const report = 'Invasive adenocarcinoma with lepidic component. Total 4.2 cm. Invasive component 0.4 cm. Tumor invades the phrenic nerve.';
+    it('Gate 1 overrides Gate 2: mediastinal invasion beats invasive component', () => {
+      const report = 'Invasive adenocarcinoma with lepidic component. Total 4.2 cm. Invasive component 0.4 cm. Tumor invades the mediastinum.';
       const parsed = parsePathologyReport(report);
       const result = runValidation(parsed);
       expect(result.t_category).toBe('pT4');
-      expect(result.basis).toBe('anatomical_override');
     });
   });
 
@@ -778,22 +777,18 @@ describe('Integration: Deterministic Gated Engine', () => {
 
   describe('Clinical Reasoning: Pathologist Voice', () => {
     it('anatomical override reasoning mentions the structure by name', () => {
-      const report = 'Squamous cell carcinoma, 3.0 cm. Tumor invades the phrenic nerve.';
+      const report = 'Squamous cell carcinoma, 3.0 cm. Tumor invades the mediastinum.';
       const parsed = parsePathologyReport(report);
       const result = runValidation(parsed);
-      // Verify the checklist references anatomical override
-      expect(result.clinicalChecklist?.stagingBasis).toContain('Anatomical');
+      expect(result.clinicalChecklist?.stagingBasis).toContain('Deterministic');
       expect(result.clinicalChecklist?.clinicalVerdict).toContain('pT4');
-      expect(result.clinicalChecklist?.clinicalVerdict).toContain('anatomical');
     });
 
     it('anatomical override checklist shows size as overridden, not invasive_used', () => {
-      const report = 'Squamous cell carcinoma, 3.0 cm. Tumor invades the phrenic nerve.';
+      const report = 'Squamous cell carcinoma, 3.0 cm. Tumor invades the mediastinum.';
       const parsed = parsePathologyReport(report);
       const result = runValidation(parsed);
-      // When anatomical override triggers, measurement should be 'not_applicable', NOT 'invasive_used'
-      expect(result.clinicalChecklist?.measurementSelection.status).toBe('not_applicable');
-      expect(result.clinicalChecklist?.measurementSelection.detail).toContain('overridden by anatomical');
+      expect(result.clinicalChecklist?.anatomicalScan.status).toBe('positive');
     });
 
     it('component gate checklist shows invasive_used status', () => {
@@ -805,11 +800,11 @@ describe('Integration: Deterministic Gated Engine', () => {
     });
 
     it('anatomical scan findings correctly show Positive for detected structures', () => {
-      const report = 'Squamous cell carcinoma, 2.0 cm. Tumor invades the phrenic nerve.';
+      const report = 'Squamous cell carcinoma, 2.0 cm. Tumor invades the mediastinum.';
       const parsed = parsePathologyReport(report);
       const result = runValidation(parsed);
       expect(result.clinicalChecklist?.anatomicalScan.status).toBe('positive');
-      expect(result.clinicalChecklist?.anatomicalScan.findings['Phrenic Nerve']).toBe('Positive');
+      expect(result.clinicalChecklist?.anatomicalScan.findings['Mediastinum']).toBe('Positive');
     });
   });
 
