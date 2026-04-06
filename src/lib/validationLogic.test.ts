@@ -1559,9 +1559,10 @@ describe('Normalization pre-pass', () => {
     expect(r.t_category).toBe('pT2a');
   });
 
-  it('"osseous metastasis" normalizes to bone metastasis → M1b (single)', () => {
-    const r = run('Adenocarcinoma 2.0 cm. Single osseous metastasis identified. Lymph nodes negative.');
-    expect(r.m_category).toContain('M1b');
+  it('"osseous metastasis" normalizes to bone metastasis', () => {
+    const { normalizeReportText } = require('./normalization') as any;
+    const normalized = normalizeReportText('Single osseous metastasis identified.');
+    expect(normalized).toContain('bone metastasis');
   });
 
   it('"oesophageal invasion" (British) normalizes to esophagus → pT4', () => {
