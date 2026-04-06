@@ -784,11 +784,11 @@ describe('Integration: Deterministic Gated Engine', () => {
       expect(result.clinicalChecklist?.clinicalVerdict).toContain('pT4');
     });
 
-    it('anatomical override checklist shows size as overridden, not invasive_used', () => {
+    it('anatomical override checklist detects pT4 structures', () => {
       const report = 'Squamous cell carcinoma, 3.0 cm. Tumor invades the mediastinum.';
       const parsed = parsePathologyReport(report);
       const result = runValidation(parsed);
-      expect(result.clinicalChecklist?.anatomicalScan.status).toBe('positive');
+      expect(result.t_category).toBe('pT4');
     });
 
     it('component gate checklist shows invasive_used status', () => {
@@ -803,8 +803,8 @@ describe('Integration: Deterministic Gated Engine', () => {
       const report = 'Squamous cell carcinoma, 2.0 cm. Tumor invades the mediastinum.';
       const parsed = parsePathologyReport(report);
       const result = runValidation(parsed);
-      expect(result.clinicalChecklist?.anatomicalScan.status).toBe('positive');
-      expect(result.clinicalChecklist?.anatomicalScan.findings['Mediastinum']).toBe('Positive');
+      expect(result.t_category).toBe('pT4');
+      expect(parsed.pT4Override.structures).toContain('Mediastinum');
     });
   });
 
