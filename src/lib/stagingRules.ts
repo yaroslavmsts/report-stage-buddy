@@ -465,30 +465,6 @@ function countOrgansWithMets(text: string): Set<string> {
 export function getNodeStage(text: string): { stage: string; criteria: string; subclassAmbiguous?: boolean } | null {
   const normalizedText = text.toLowerCase();
 
-  // pNx detection — nodes not submitted / not sampled / not examined
-  const NX_PHRASES = [
-    'no lymph nodes submitted',
-    'no nodes submitted',
-    'lymph nodes not submitted',
-    'no lymph nodes received',
-    'lymph nodes not sampled',
-    'no lymph nodes identified',
-    'lymph node sampling not performed',
-    'nodal assessment not performed',
-    'no lymph node material',
-    'lymph nodes not received',
-    'nodes not sampled',
-    'no nodal tissue',
-    'no nodal material',
-    'lymph nodes not identified',
-    'lymph nodes not examined',
-    'no lymph nodes examined',
-  ];
-  for (const phrase of NX_PHRASES) {
-    if (normalizedText.includes(phrase)) {
-      return { stage: 'pNx', criteria: 'Regional lymph nodes cannot be assessed (not submitted/sampled)' };
-    }
-  }
 
   const n3Rule = NODE_RULES.find(r => r.stage === 'pN3')!;
   for (const keyword of n3Rule.keywords) {
