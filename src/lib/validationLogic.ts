@@ -2618,7 +2618,19 @@ export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean)
   const mResult = getMetastasisStage(textForDetection);
   const icd10Result = getICD10Code(textForDetection);
   
-  const n_category = nResult?.stage || 'pN0';
+  // If getNodeStage returned null, check for biopsy specimen before defaulting to pN0
+  let n_category: string;
+  if (nResult) {
+    n_category = nResult.stage;
+  } else {
+    const BIOPSY_PATTERNS = /\b(?:biopsy|needle biopsy|core biopsy|wedge biopsy|transbronchial biopsy|endobronchial biopsy|ct[- ]?guided biopsy|fine needle aspirat\w*)\b/i;
+    const HAS_NODAL_INFO = /\blymph\s*node|nodal\s*stag|\bstation\s*\d|\blevel\s*\d|\b\d+\s*\/\s*\d+\s*(?:lymph|node)|\bnodes?\s*(?:positive|negative|examined|sampled|submitted|received|identified)\b/i;
+    if (BIOPSY_PATTERNS.test(textForDetection) && !HAS_NODAL_INFO.test(textForDetection)) {
+      n_category = 'pNx';
+    } else {
+      n_category = 'pN0';
+    }
+  }
   let m_category = mResult?.stage || 'pM0';
   
   // AJCC 9th: N2/M1c subclass alerts

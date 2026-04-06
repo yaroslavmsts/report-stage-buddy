@@ -445,19 +445,52 @@ function countN2Stations(text: string): number {
   return stationSet.size;
 }
 
-// Helper: count organ systems with metastatic involvement
+// Helper: check if an organ mention is in a negated context
+// Looks for negation words in the same sentence, near the match
+function isNegatedOrganMention(text: string, matchIndex: number): boolean {
+  // Find sentence boundaries
+  const sentenceStart = Math.max(
+    text.lastIndexOf('.', matchIndex - 1),
+    text.lastIndexOf('\n', matchIndex - 1),
+    text.lastIndexOf(';', matchIndex - 1)
+  ) + 1;
+  const nextPeriod = text.indexOf('.', matchIndex);
+  const nextNewline = text.indexOf('\n', matchIndex);
+  const nextSemicolon = text.indexOf(';', matchIndex);
+  const ends = [nextPeriod, nextNewline, nextSemicolon].filter(i => i !== -1);
+  const sentenceEnd = ends.length > 0 ? Math.min(...ends) : text.length;
+  const sentence = text.slice(sentenceStart, sentenceEnd).toLowerCase();
+
+  // Check for negation patterns in the sentence
+  return /\bno\b|\bnot\b|\bwithout\b|\bnegative\b|\babsent\b|\bdenied\b|\bno evidence\b|\brule(?:d)?\s*out\b|\bexcluded\b/.test(sentence);
+}
+
+// Helper: count organ systems with POSITIVE (non-negated) metastatic involvement
 function countOrgansWithMets(text: string): Set<string> {
   const normalizedText = text.toLowerCase();
   const organs = new Set<string>();
   const hasMetContext = /metastas|mets?\b/i.test(normalizedText);
   if (!hasMetContext) return organs;
 
-  if (/\b(?:brain|cerebral|intracranial)\b/.test(normalizedText)) organs.add('brain');
-  if (/\b(?:bone|osseous|skeletal)\b/.test(normalizedText)) organs.add('bone');
-  if (/\b(?:liver|hepatic)\b/.test(normalizedText)) organs.add('liver');
-  if (/\badrenal\b/.test(normalizedText)) organs.add('adrenal');
-  if (/\b(?:skin|cutaneous)\b/.test(normalizedText)) organs.add('skin');
-  if (/\b(?:kidney|renal)\b/.test(normalizedText)) organs.add('kidney');
+  const organPatterns: Array<{ name: string; pattern: RegExp }> = [
+    { name: 'brain', pattern: /\b(?:brain|cerebral|intracranial)\b/gi },
+    { name: 'bone', pattern: /\b(?:bone|osseous|skeletal)\b/gi },
+    { name: 'liver', pattern: /\b(?:liver|hepatic)\b/gi },
+    { name: 'adrenal', pattern: /\b(?:adrenal)\b/gi },
+    { name: 'skin', pattern: /\b(?:skin|cutaneous)\b/gi },
+    { name: 'kidney', pattern: /\b(?:kidney|renal)\b/gi },
+  ];
+
+  for (const { name, pattern } of organPatterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(normalizedText)) !== null) {
+      if (!isNegatedOrganMention(normalizedText, match.index)) {
+        organs.add(name);
+        break; // one positive mention is enough
+      }
+    }
+  }
+
   return organs;
 }
 
@@ -554,6 +587,14 @@ export function getNodeStage(text: string): { stage: string; criteria: string; s
     if (normalizedText.includes(phrase)) {
       return { stage: 'pNx', criteria: 'Regional lymph nodes cannot be assessed (not submitted/sampled)' };
     }
+  }
+
+  // Biopsy specimen detection → pNx (biopsy specimens typically don't include nodal tissue)
+  // Only triggers if NO explicit nodal staging info is present anywhere in the report
+  const BIOPSY_PATTERNS = /\b(?:biopsy|needle biopsy|core biopsy|wedge biopsy|transbronchial biopsy|endobronchial biopsy|ct[- ]?guided biopsy|fine needle aspirat\w*)\b/i;
+  const HAS_NODAL_INFO = /\blymph\s*node|nodal\s*stag|\bstation\s*\d|\blevel\s*\d|\b\d+\s*\/\s*\d+\s*(?:lymph|node)|\bnodes?\s*(?:positive|negative|examined|sampled|submitted|received|identified)\b/i;
+  if (BIOPSY_PATTERNS.test(normalizedText) && !HAS_NODAL_INFO.test(normalizedText)) {
+    return { stage: 'pNx', criteria: 'Regional lymph nodes cannot be assessed (biopsy specimen — no nodal tissue submitted)' };
   }
 
   const n0Rule = NODE_RULES.find(r => r.stage === 'pN0')!;
