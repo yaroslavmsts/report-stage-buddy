@@ -405,6 +405,9 @@ const Index = () => {
   const [isValidating, setIsValidating] = useState(false);
   const [isOverridden, setIsOverridden] = useState(false);
   const [overrideTimestamp, setOverrideTimestamp] = useState<string | null>(null);
+  const [tumorType, setTumorType] = useState<string>('nsclc_adeno');
+  const [molecularMarkers, setMolecularMarkers] = useState<MolecularMarkers>(DEFAULT_MARKERS);
+  const [markersOpen, setMarkersOpen] = useState(false);
   const [validationResult, setValidationResult] = useState<{
     comparison: { isMatch: boolean; message: string; details: string };
     calculatedResult: ReturnType<typeof runValidation>;
@@ -502,6 +505,7 @@ const Index = () => {
 
   const handleClear = () => {
     setReportText('');
+    setMolecularMarkers(DEFAULT_MARKERS);
     setValidationResult(null);
     setIsOverridden(false);
     setOverrideTimestamp(null);
