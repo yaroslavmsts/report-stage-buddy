@@ -403,15 +403,23 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
         </Card>
 
         {/* AJCC Prognostic Group */}
-        <Card className="border-2 border-primary/30 bg-primary/5">
+        <Card className={`border-2 ${calculatedResult.stage_provisional ? 'border-warning/50 bg-warning/5' : 'border-primary/30 bg-primary/5'}`}>
           <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center gap-3">
-              <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+              <Activity className={`h-5 w-5 sm:h-6 sm:w-6 ${calculatedResult.stage_provisional ? 'text-warning' : 'text-primary'}`} />
               <div>
                 <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">AJCC Prognostic Group</p>
-                <p className="text-2xl sm:text-3xl lg:text-4xl font-bold text-primary">
-                  {calculatedResult.stage_group || 'N/A'}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className={`text-2xl sm:text-3xl lg:text-4xl font-bold ${calculatedResult.stage_provisional ? 'text-warning' : 'text-primary'}`}>
+                    {calculatedResult.stage_group || 'N/A'}
+                  </p>
+                  {calculatedResult.stage_provisional && (
+                    <Badge variant="outline" className="border-warning text-warning text-[10px]">Provisional</Badge>
+                  )}
+                </div>
+                {calculatedResult.stage_provisional_note && (
+                  <p className="text-[10px] sm:text-xs text-warning mt-1">{calculatedResult.stage_provisional_note}</p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -444,7 +452,7 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
                   />
                 </div>
                 <p className="text-[10px] sm:text-xs text-muted-foreground">
-                  Based on {calculatedResult.stage_group} pathologic staging
+                  Based on {calculatedResult.stage_group} pathologic staging{calculatedResult.stage_provisional ? ' (provisional)' : ''}
                 </p>
               </>
             ) : (
