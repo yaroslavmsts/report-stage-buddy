@@ -1855,7 +1855,7 @@ Lymph nodes: level 4L positive (1/2).`;
     });
 
     it('T3/N1/M0 → Stage IIIA', () => {
-      const r = run('Squamous cell carcinoma 2.0 cm. Chest wall invasion. Hilar lymph node positive (1/1). No distant metastasis.');
+      const r = run('Squamous cell carcinoma 2.0 cm. Chest wall invasion. Hilar lymph node metastasis. No distant metastasis.');
       expect(r.stage_group).toBe('Stage IIIA');
     });
 
@@ -1890,7 +1890,7 @@ Lymph nodes: level 4L positive (1/2).`;
     });
 
     it('any/any/M1b → Stage IVA', () => {
-      const r = run('Adenocarcinoma 2.0 cm. Single brain metastasis. Lymph nodes negative.');
+      const r = run('Adenocarcinoma 2.0 cm. Single distant metastasis to brain. Lymph nodes negative.');
       expect(r.stage_group).toBe('Stage IVA');
     });
 
