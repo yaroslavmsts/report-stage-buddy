@@ -1,45 +1,46 @@
 
 
-## Fix: Pericardium Normalization Too Broad
+## Fix: Default N fallback should be pNx, not pN0
 
 ### Problem
-The normalization map entry `[/\bpericardium\b/gi, 'heart']` converts all pericardium mentions to "heart" → pT4, even when the clinical meaning is parietal pericardium (pT3) or unqualified (ambiguous).
+The pNx detection in `getNodeStage()` is working correctly for explicit phrases like "no lymph nodes submitted." However, when a report simply **does not mention lymph nodes at all**, `getNodeStage()` returns `null` (line 607). Then in `validationLogic.ts` (line 2631), the fallback sets `n_category = 'pN0'` — which is clinically wrong. pN0 means "nodes examined, none positive." No mention = cannot assess = pNx.
 
-### Changes
+### Root cause
+Two places default to pN0 when they should default to pNx:
 
-**File: `src/lib/normalization.ts` (lines 107-120)**
+1. **`stagingRules.ts` line 607**: `getNodeStage()` returns `null` when nothing matches — this is fine as a sentinel, but the consumer interprets it as "default to pN0"
+2. **`validationLogic.ts` line 2631**: The else-branch after biopsy check falls through to `n_category = 'pN0'`
 
-Replace the HEART_SYNONYMS section entries for pericardium:
+### Fix
 
-1. **Remove** broad `[/\bpericardium\b/gi, 'heart']` — this is the root cause
-2. **Move up** `[/\bparietal pericardium\b/gi, 'parietal pericardium']` and `[/\bvisceral pericardium\b/gi, 'heart']` to appear first (specific before broad)
-3. **Change** `[/\bpericardial sac\b/gi, 'heart']` → `'parietal pericardium'` (sac = parietal layer → pT3)
-4. **Remove** `[/\bpericardial fat\b/gi, 'heart']` entirely (pericardial fat is extrapericardial → pT3 at most, not pT4)
-5. **Change** `[/\bpericardial tissue\b/gi, 'heart']` → `'parietal pericardium'`
-6. **Keep** `[/\bpericardial wall\b/gi, 'heart']` — change to `'parietal pericardium'` (outer wall = parietal)
-7. **Keep** epicardium, myocardium, cardiac entries as `'heart'` (correct pT4)
+**File: `src/lib/validationLogic.ts` (~line 2631)**
 
-**File: `src/lib/validationLogic.ts`**
+Change the final fallback from `pN0` to `pNx`:
+```
+// Before:
+n_category = 'pN0';
 
-Add detection for unqualified "pericardium" + invasion language that wasn't normalized to either parietal or visceral. After normalization, if the original text contains bare "pericardium" (not preceded by "parietal" or "visceral") with invasion context, add a `ConflictInfo` entry with a message like: "Pericardium invasion detected — specify parietal (pT3) or visceral/epicardium (pT4)."
+// After:
+n_category = 'pNx';
+```
 
-Implementation: In `parsePathologyReport()`, after normalization and conflict detection, scan the **original rawText** for `/\bpericardi(um|al)\b/gi` matches. For each match, check if it's preceded by "parietal" or "visceral" — if not, and if the sentence contains invasion language, push a conflict with `conflictType: 'ambiguity'` and set `hasConflict = true`. This leverages the existing conflict/ambiguity UI (yellow alerts) without any new interfaces.
+This means:
+- Explicit "lymph nodes negative" / "0/5 nodes" → pN0 (via `getNodeStage()` N0 keywords)
+- Explicit "no lymph nodes submitted" → pNx (via `getNodeStage()` NX_PHRASES)  
+- Biopsy with no nodal info → pNx (via biopsy check)
+- **No mention of nodes at all → pNx** (via default fallback) ← THIS IS THE FIX
 
 **File: `src/lib/validationLogic.test.ts`**
 
-Add tests:
-- `"invasion into the pericardium"` (unqualified) → should NOT trigger pT4, should trigger ambiguity conflict
-- `"parietal pericardium invasion"` → pT3, no ambiguity
-- `"visceral pericardium invasion"` → pT4, no ambiguity  
-- `"pericardial sac invasion"` → pT3 (not pT4)
-- `"pericardial fat invasion"` → no pT4 override
-- `"no pericardial invasion"` → negated, no override
-- Existing pericardium tests updated to match new behavior
+Add test:
+- Report with zero lymph node mentions: `"Right upper lobe lobectomy. Adenocarcinoma, 2.0 cm. No distant metastasis."` → expect pNx
+- Verify existing "lymph nodes negative" test still returns pN0
 
-### Technical Details
+### Files to modify
+- `src/lib/validationLogic.ts` — one-line change (line 2631)
+- `src/lib/validationLogic.test.ts` — add 1-2 tests
 
-- Normalization ordering: specific multi-word patterns (`parietal pericardium`, `visceral pericardium`, `pericardial sac`) must appear before any remaining broad patterns in `HEART_SYNONYMS`
-- The unqualified pericardium alert uses the existing `ConflictInfo` + `hasConflict` pipeline — no new interfaces needed
-- The alert scan runs on `rawText` (pre-normalization) so it catches the original wording
-- No changes to staging rules or gate logic in `stagingRules.ts`
+### Files NOT touched
+- `src/lib/stagingRules.ts` — no changes needed, pNx detection there is correct
+- `src/lib/normalization.ts` — no changes
 
