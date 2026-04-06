@@ -1513,3 +1513,82 @@ describe('Positive-over-negation conflict resolution', () => {
     expect(result.confidence!.provisional).toBe(true);
   });
 });
+
+// ============================================================
+// Normalization pre-pass
+// ============================================================
+describe('Normalization pre-pass', () => {
+  const run = (text: string) => {
+    const parsed = parsePathologyReport(text);
+    return runValidation(parsed);
+  };
+
+  it('British "tumour" is recognized as tumor', () => {
+    const r = run('Invasive tumour, 2.0 cm. No visceral pleural invasion. Lymph nodes negative. No distant metastasis.');
+    expect(r.t_category).toBe('pT1b');
+  });
+
+  it('VPI abbreviation triggers visceral pleural invasion → pT2a floor', () => {
+    const r = run('Adenocarcinoma 0.8 cm. VPI present. Lymph nodes negative. No distant metastasis.');
+    expect(r.t_category).toBe('pT2a');
+  });
+
+  it('"thoracic wall invasion" normalizes to chest wall → pT3', () => {
+    const r = run('Squamous cell carcinoma, 1.5 cm. Invasion into the thoracic wall. Lymph nodes negative. No distant metastasis.');
+    expect(r.t_category).toBe('pT3');
+  });
+
+  it('"pericardium invasion" normalizes to heart → pT4', () => {
+    const r = run('Adenocarcinoma 2.0 cm. Direct invasion into the pericardium. Lymph nodes negative. No distant metastasis.');
+    expect(r.t_category).toBe('pT4');
+  });
+
+  it('"station 7 positive" normalizes to subcarinal → pN2', () => {
+    const r = run('Adenocarcinoma 2.5 cm. Station 7 lymph node positive. No distant metastasis.');
+    expect(r.n_category).toContain('N2');
+  });
+
+  it('"MIA" abbreviation normalizes to minimally invasive adenocarcinoma', () => {
+    const r = run('MIA, invasive component 0.4 cm. Total size 1.8 cm. Margins negative.');
+    expect(r.t_category).toBe('pT1mi');
+  });
+
+  it('"SCC" abbreviation is recognized as squamous cell carcinoma', () => {
+    const r = run('SCC, 3.5 cm. No pleural invasion. Lymph nodes negative. No distant metastasis.');
+    expect(r.t_category).toBe('pT2a');
+  });
+
+  it('"osseous metastasis" normalizes to bone metastasis → M1b (single)', () => {
+    const r = run('Adenocarcinoma 2.0 cm. Single osseous metastasis identified. Lymph nodes negative.');
+    expect(r.m_category).toContain('M1b');
+  });
+
+  it('"oesophageal invasion" (British) normalizes to esophagus → pT4', () => {
+    const r = run('Squamous cell carcinoma 3.0 cm. Oesophageal invasion confirmed. Lymph nodes negative.');
+    expect(r.t_category).toBe('pT4');
+  });
+
+  it('"SVC invasion" normalizes to great vessels → pT4', () => {
+    const r = run('Adenocarcinoma 2.5 cm. Tumor invades the SVC. Lymph nodes negative.');
+    expect(r.t_category).toBe('pT4');
+  });
+
+  it('getNormalizationDiff returns correct diff entries', () => {
+    const { getNormalizationDiff } = require('./normalization');
+    const diffs = getNormalizationDiff('Invasive tumour, VPI present, station 7 positive.');
+    const terms = diffs.map((d: any) => d.matched);
+    expect(terms).toContain('tumour');
+    expect(terms.some((t: string) => t.includes('VPI'))).toBe(true);
+  });
+
+  it('rawText in ParsedReport is always the original unmodified input', () => {
+    const raw = 'Invasive tumour, VPI present.';
+    const parsed = parsePathologyReport(raw);
+    expect(parsed.rawText).toBe(raw);
+  });
+
+  it('normalized synonym + negation → no override fires', () => {
+    const r = run('Squamous cell carcinoma 2.5 cm. No thoracic wall invasion. Lymph nodes negative. No distant metastasis.');
+    expect(r.t_category).not.toBe('pT3');
+  });
+});
