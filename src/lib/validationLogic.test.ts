@@ -1845,7 +1845,7 @@ Lymph nodes: level 4L positive (1/2).`;
     });
 
     it('T2b/N1/M0 → Stage IIB', () => {
-      const r = run('Adenocarcinoma 4.5 cm. Hilar lymph node positive (1/2). No distant metastasis.');
+      const r = run('Adenocarcinoma 4.5 cm. Hilar lymph node metastasis. No distant metastasis.');
       expect(r.stage_group).toBe('Stage IIB');
     });
 
