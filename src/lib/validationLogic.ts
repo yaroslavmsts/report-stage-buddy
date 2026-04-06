@@ -1979,31 +1979,31 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   // CONFLICT DETECTION - Safety Logic Layer
   // ============================================
   // Detect invasion + negation keywords within 5-word proximity (6-10 = ambiguous)
-  const conflicts = detectInvasionConflicts(reportText);
+  const conflicts = detectInvasionConflicts(normalizedText);
   
   // Detect ambiguous phrases that require manual verification
-  const ambiguityConflicts = detectAmbiguityPhrases(reportText);
+  const ambiguityConflicts = detectAmbiguityPhrases(normalizedText);
   const allConflicts = [...conflicts, ...ambiguityConflicts, ...directInvasionConflicts];
 
   // ============================================
   // pT4 ANATOMICAL OVERRIDE DETECTION
   // ============================================
-  const pT4Structures = detectPT4Structures(reportText, isNegatedFinding);
+  const pT4Structures = detectPT4Structures(normalizedText, isNegatedFinding);
   
   // ============================================
   // NODAL STATION ALERTS
   // ============================================
-  const nodalStationAlerts = detectNodalStationAlerts(reportText, inputs.nodal_stations);
+  const nodalStationAlerts = detectNodalStationAlerts(normalizedText, inputs.nodal_stations);
 
   // ============================================
   // MARGIN DETECTION - High Priority Alert
   // ============================================
-  const marginAlerts = detectMarginStatus(reportText);
+  const marginAlerts = detectMarginStatus(normalizedText);
 
   // ============================================
   // MULTIPLE PRIMARY TUMORS DETECTION - "(m)" suffix
   // ============================================
-  const multiplePrimaryTumors = detectMultiplePrimaryTumors(reportText);
+  const multiplePrimaryTumors = detectMultiplePrimaryTumors(normalizedText);
 
   // ============================================
   // INVASIVE SIZE MISSING CHECK (for nonmucinous adenocarcinomas)
