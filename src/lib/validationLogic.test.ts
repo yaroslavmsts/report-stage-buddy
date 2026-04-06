@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { detectInvasionConflicts, detectAmbiguityPhrases, detectPT4Structures, detectNodalStationAlerts, detectMarginStatus, detectMultiplePrimaryTumors, parsePathologyReport, runValidation, isNegated, ConflictInfo, NodalStationAlert, MarginAlert } from './validationLogic';
+import { getNormalizationDiff } from './normalization';
 
 describe('detectInvasionConflicts', () => {
   describe('should NOT detect conflict (standard negation patterns - CONFIRMED NEGATIVE)', () => {
@@ -1574,7 +1575,7 @@ describe('Normalization pre-pass', () => {
   });
 
   it('getNormalizationDiff returns correct diff entries', () => {
-    const { getNormalizationDiff } = require('./normalization');
+    const diffs = getNormalizationDiff('Invasive tumour, VPI present, station 7 positive.');
     const diffs = getNormalizationDiff('Invasive tumour, VPI present, station 7 positive.');
     const terms = diffs.map((d: any) => d.matched);
     expect(terms).toContain('tumour');
