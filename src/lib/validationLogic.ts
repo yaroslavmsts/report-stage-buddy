@@ -2628,7 +2628,7 @@ export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean)
     if (BIOPSY_PATTERNS.test(textForDetection) && !HAS_NODAL_INFO.test(textForDetection)) {
       n_category = 'pNx';
     } else {
-      n_category = 'pN0';
+      n_category = 'pNx';
     }
   }
   let m_category = mResult?.stage || 'pM0';
