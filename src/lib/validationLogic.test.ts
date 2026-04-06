@@ -827,7 +827,7 @@ describe('Integration: Deterministic Gated Engine', () => {
 
   describe('Circuit Breaker: Intercostal muscle + parietal pleura detection', () => {
     it('intercostal muscle via "invasion into ... and underlying intercostal muscle" → pT3', () => {
-      const report = 'Squamous cell carcinoma of the LUL measuring 4.1 cm. There is direct microscopic evidence of invasion into the parietal pleura and underlying intercostal muscle.';
+      const report = 'Squamous cell carcinoma of the LUL measuring 4.1 cm. There is direct microscopic evidence of invasion into the parietal pleura and underlying intercostal muscle. Lymph nodes negative (0/8). No distant metastasis.';
       const parsed = parsePathologyReport(report);
       const result = runValidation(parsed);
       expect(result.t_category).toBe('pT3');
