@@ -486,7 +486,7 @@ const Index = () => {
             </div>
             <div className="min-w-0 flex-1">
               <h1 className="text-lg sm:text-xl font-bold text-foreground truncate">TNM Staging Validator</h1>
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">CAP Lung 4.0.0.2 • AJCC 8th Edition</p>
+              <p className="text-xs sm:text-sm text-muted-foreground truncate">CAP Lung 4.0.0.2 • AJCC 9th Edition (effective Jan 1, 2025)</p>
             </div>
           </div>
         </div>
