@@ -25,18 +25,13 @@ const CHEST_WALL_SYNONYMS: [RegExp, string][] = [
   [/\bcostal wall\b/gi,                           'chest wall'],
   [/\brib cage\b/gi,                              'chest wall'],
   [/\bribcage\b/gi,                               'chest wall'],
-  [/\bintercostal soft tissue\b/gi,               'chest wall'],
-  [/\bintercostal muscle\b/gi,                    'chest wall'],
-  [/\bintercostal muscles\b/gi,                   'chest wall'],
-  [/\bintercostal space\b/gi,                     'chest wall'],
+  // NOTE: intercostal muscle/space NOT normalized — engine has specific intercostal detection patterns
   [/\bsubcutaneous chest tissue\b/gi,             'chest wall'],
-  [/\bexternal intercostal\b/gi,                  'chest wall'],
-  [/\binternal intercostal\b/gi,                  'chest wall'],
+  // NOTE: external/internal intercostal NOT normalized — engine has specific patterns
   [/\bchest wall soft tissue\b/gi,                'chest wall'],
   [/\bthoracic soft tissue\b/gi,                  'chest wall'],
   [/\bparietal soft tissue\b/gi,                  'chest wall'],
-  [/\brib\b/gi,                                   'chest wall'],
-  [/\bribs\b/gi,                                  'chest wall'],
+  // NOTE: rib/ribs NOT normalized — engine has specific rib detection patterns
   [/\bcostal bone\b/gi,                           'chest wall'],
   [/\bcostal cartilage\b/gi,                      'chest wall'],
   [/\bsternum\b/gi,                               'chest wall'],
@@ -47,7 +42,7 @@ const CHEST_WALL_SYNONYMS: [RegExp, string][] = [
 // SECTION 2: MEDIASTINAL STRUCTURES (→ pT4)
 // ============================================================
 const MEDIASTINUM_SYNONYMS: [RegExp, string][] = [
-  [/\bmediastinal fat\b/gi,                       'mediastinum'],
+  // NOTE: "mediastinal fat" NOT normalized — engine detects it specifically
   [/\bmediastinal soft tissue\b/gi,               'mediastinum'],
   [/\bmediastinal adipose\b/gi,                   'mediastinum'],
   [/\bmediastinal connective tissue\b/gi,         'mediastinum'],
@@ -62,11 +57,10 @@ const MEDIASTINUM_SYNONYMS: [RegExp, string][] = [
 // SECTION 3: PHRENIC NERVE (→ pT3 in AJCC 9th)
 // ============================================================
 const PHRENIC_NERVE_SYNONYMS: [RegExp, string][] = [
-  [/\bphrenic\b/gi,                               'phrenic nerve'],
+  // NOTE: bare "phrenic" removed — causes double "phrenic nerve nerve" when "phrenic nerve" is in text
   [/\bn\. phrenicus\b/gi,                         'phrenic nerve'],
   [/\bnerve phrenicus\b/gi,                       'phrenic nerve'],
-  [/\bphrenic nerve involvement\b/gi,             'phrenic nerve'],
-  [/\bphrenic nerve invasion\b/gi,                'phrenic nerve'],
+  // NOTE: "phrenic nerve involvement/invasion" already canonical — no normalization needed
 ];
 
 // ============================================================
@@ -287,8 +281,8 @@ const LYMPH_NODE_SYNONYMS: [RegExp, string][] = [
   [/\binterlobar lymph node\b/gi,                 'level 11 lymph node'],
   [/\bintrapulmonary lymph node\b/gi,             'level 12 lymph node'],
   // Negative result variants
-  [/\bnodes negative\b/gi,                        'lymph nodes negative'],
-  [/\bnodes clear\b/gi,                           'lymph nodes negative'],
+  [/(?<!\blymph\s)\bnodes negative\b/gi,           'lymph nodes negative'],
+  [/(?<!\blymph\s)\bnodes clear\b/gi,             'lymph nodes negative'],
   [/\bno nodal metastasis\b/gi,                   'lymph nodes negative'],
   [/\bnodal disease absent\b/gi,                  'lymph nodes negative'],
   [/\bno nodal involvement\b/gi,                  'lymph nodes negative'],

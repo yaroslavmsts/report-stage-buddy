@@ -1,3 +1,4 @@
+import { normalizeReportText } from './normalization';
 // AJCC 9th Edition Lung Cancer Full TNM Staging Validation Engine
 // SINGLE-PASS 4-GATE ARCHITECTURE v12.0.0
 // ============================================
@@ -233,6 +234,7 @@ export interface ParsedReport {
   reportedNStage: string | null;
   reportedMStage: string | null;
   rawText: string;
+  normalizedText: string;
   conflicts: ConflictInfo[];
   hasConflict: boolean;
   nodalStationAlerts: NodalStationAlert[];
@@ -1302,7 +1304,8 @@ export function detectMultiplePrimaryTumors(reportText: string): boolean {
   return false;
 }
 export function parsePathologyReport(reportText: string): ParsedReport {
-  const text = reportText.toLowerCase();
+  const normalizedText = normalizeReportText(reportText);
+  const text = normalizedText.toLowerCase();
   
   // Initialize default inputs
   const inputs: ValidationInputs = {
@@ -1957,50 +1960,50 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   }
 
   // Extract lymph node findings for pN calculation
-  const lymphNodeResult = getNodeStage(reportText);
+  const lymphNodeResult = getNodeStage(normalizedText);
   if (lymphNodeResult) {
     extractedText.lymphNodeFindings.push(`${lymphNodeResult.stage}: ${lymphNodeResult.criteria}`);
   }
 
   // Extract metastasis findings for pM calculation
-  const metastasisResult = getMetastasisStage(reportText);
+  const metastasisResult = getMetastasisStage(normalizedText);
   if (metastasisResult) {
     extractedText.metastasisFindings.push(`${metastasisResult.stage}: ${metastasisResult.criteria}`);
   }
 
   // Extract tumor site for ICD-10
-  const icd10Result = getICD10Code(reportText);
+  const icd10Result = getICD10Code(normalizedText);
   extractedText.siteFindings.push(`${icd10Result.site} (${icd10Result.code})`);
 
   // ============================================
   // CONFLICT DETECTION - Safety Logic Layer
   // ============================================
   // Detect invasion + negation keywords within 5-word proximity (6-10 = ambiguous)
-  const conflicts = detectInvasionConflicts(reportText);
+  const conflicts = detectInvasionConflicts(normalizedText);
   
   // Detect ambiguous phrases that require manual verification
-  const ambiguityConflicts = detectAmbiguityPhrases(reportText);
+  const ambiguityConflicts = detectAmbiguityPhrases(normalizedText);
   const allConflicts = [...conflicts, ...ambiguityConflicts, ...directInvasionConflicts];
 
   // ============================================
   // pT4 ANATOMICAL OVERRIDE DETECTION
   // ============================================
-  const pT4Structures = detectPT4Structures(reportText, isNegatedFinding);
+  const pT4Structures = detectPT4Structures(normalizedText, isNegatedFinding);
   
   // ============================================
   // NODAL STATION ALERTS
   // ============================================
-  const nodalStationAlerts = detectNodalStationAlerts(reportText, inputs.nodal_stations);
+  const nodalStationAlerts = detectNodalStationAlerts(normalizedText, inputs.nodal_stations);
 
   // ============================================
   // MARGIN DETECTION - High Priority Alert
   // ============================================
-  const marginAlerts = detectMarginStatus(reportText);
+  const marginAlerts = detectMarginStatus(normalizedText);
 
   // ============================================
   // MULTIPLE PRIMARY TUMORS DETECTION - "(m)" suffix
   // ============================================
-  const multiplePrimaryTumors = detectMultiplePrimaryTumors(reportText);
+  const multiplePrimaryTumors = detectMultiplePrimaryTumors(normalizedText);
 
   // ============================================
   // INVASIVE SIZE MISSING CHECK (for nonmucinous adenocarcinomas)
@@ -2030,7 +2033,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   // ============================================
   // IPSILATERAL LOBE NODULE DETECTION - Different lobe same lung = pT4
   // ============================================
-  const ipsilateralLobeInfo = detectIpsilateralLobeNodules(reportText);
+  const ipsilateralLobeInfo = detectIpsilateralLobeNodules(normalizedText);
 
   // ============================================
   // BUILD TRIGGER EVIDENCE
@@ -2269,6 +2272,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     reportedNStage, 
     reportedMStage, 
     rawText: reportText,
+    normalizedText,
     conflicts: allConflicts,
     hasConflict: allConflicts.length > 0,
     nodalStationAlerts,
@@ -2551,7 +2555,7 @@ export function computeConfidence(
 }
 
 export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean): ValidationResult {
-  const { inputs, rawText, ipsilateralLobeInfo, pT4Override, multiplePrimaryTumors } = parsedReport;
+  const { inputs, rawText, normalizedText, ipsilateralLobeInfo, pT4Override, multiplePrimaryTumors } = parsedReport;
   const effectiveHasConflict = hasConflict ?? parsedReport.hasConflict;
   
   // Initialize Gate Execution Tracking
@@ -2560,14 +2564,15 @@ export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean)
   // ============================================
   // EXTRACTION PHASE - Identify histology FIRST
   // ============================================
+  const textForDetection = normalizedText || rawText;
   const isAdenocarcinoma = 
     inputs.histology.is_invasive_nonmucinous_adenocarcinoma_with_lepidic_component ||
-    rawText.toLowerCase().includes('adenocarcinoma');
+    textForDetection.toLowerCase().includes('adenocarcinoma');
   
-  // Calculate N and M stages from raw text (these are lightweight keyword lookups, not detection)
-  const nResult = getNodeStage(rawText);
-  const mResult = getMetastasisStage(rawText);
-  const icd10Result = getICD10Code(rawText);
+  // Calculate N and M stages from normalized text
+  const nResult = getNodeStage(textForDetection);
+  const mResult = getMetastasisStage(textForDetection);
+  const icd10Result = getICD10Code(textForDetection);
   
   const n_category = nResult?.stage || 'pN0';
   let m_category = mResult?.stage || 'pM0';
@@ -2711,7 +2716,7 @@ ${gateDetail}`;
                 : 'No measurement extracted'),
       },
       anatomicalScan: {
-        status: (triggeredGate === 1) ? 'positive' : 'negative',
+        status: (triggeredGate === 1 || (triggeredGate === 99 && gateExecutions.some(g => g.gate === 'GATE 1' && g.status === 'Triggered'))) ? 'positive' : 'negative',
         findings: {
           'Hilar Fat': inputs.direct_invasion.hilar_fat ? 'Positive' : 'Negative',
           'Chest Wall': inputs.direct_invasion.chest_wall ? 'Positive' : 'Negative',
@@ -2920,7 +2925,7 @@ ${gateDetail}`;
       /(?:underlying|adjacent)\s+ribs?\b/i,
     ];
     const isBridgeNegatedInSentence = (matchText: string): boolean => {
-      const lowerRaw = rawText.toLowerCase();
+      const lowerRaw = textForDetection.toLowerCase();
       const sentences = lowerRaw.split(/[.!?]/);
       for (const sentence of sentences) {
         if (sentence.includes(matchText.toLowerCase().substring(0, 20))) {
@@ -2933,14 +2938,14 @@ ${gateDetail}`;
     for (const pattern of intercostalPatterns) {
       const isIntercostalPattern = pattern.source.includes('intercostal');
       const negationTerm = isIntercostalPattern ? 'intercostal' : 'rib';
-      const match = pattern.exec(rawText.toLowerCase());
+      const match = pattern.exec(textForDetection.toLowerCase());
       if (match) {
         // Bridge negation safety
         const isBridge = pattern.source.includes('[^.]{0,80}');
         if (isBridge && isBridgeNegatedInSentence(match[0])) {
           continue;
         }
-        if (!isNegatedFindingLocal(negationTerm, rawText)) {
+        if (!isNegatedFindingLocal(negationTerm, textForDetection)) {
           gate1Triggered = true;
           gate1Stage = 'pT3';
           gate1Detail = 'Intercostal muscle/rib invasion → pT3';

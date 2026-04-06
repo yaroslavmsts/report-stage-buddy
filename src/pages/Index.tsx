@@ -4,6 +4,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ValidationResult } from '@/components/ValidationResult';
 import { parsePathologyReport, runValidation, compareStages, getStagingSource } from '@/lib/validationLogic';
+import { getNormalizationDiff } from '@/lib/normalization';
 import { STAGING_RULES } from '@/lib/stagingRules';
 import { Loader2, FileText, Shield, AlertTriangle, Database, ChevronDown, HelpCircle, FlaskConical } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -408,6 +409,8 @@ const Index = () => {
   const [tumorType, setTumorType] = useState<string>('nsclc_adeno');
   const [molecularMarkers, setMolecularMarkers] = useState<MolecularMarkers>(DEFAULT_MARKERS);
   const [markersOpen, setMarkersOpen] = useState(false);
+  const [normDiffs, setNormDiffs] = useState<{ pattern: string; replacement: string; matched: string }[]>([]);
+  const [normExpanded, setNormExpanded] = useState(false);
   const [validationResult, setValidationResult] = useState<{
     comparison: { isMatch: boolean; message: string; details: string };
     calculatedResult: ReturnType<typeof runValidation>;
@@ -423,6 +426,10 @@ const Index = () => {
     
     // Simulate a brief processing delay for UX
     await new Promise(resolve => setTimeout(resolve, 500));
+
+    const diffs = getNormalizationDiff(reportText);
+    setNormDiffs(diffs);
+    setNormExpanded(false);
 
     const parsedReport = parsePathologyReport(reportText);
     // Single-pass: parsedReport contains all pre-detected data, no re-detection needed
@@ -568,8 +575,30 @@ const Index = () => {
                     setReportText(e.target.value);
                     setValidationResult(null);
                   }}
-                  className="min-h-[250px] sm:min-h-[300px] lg:min-h-[400px] font-mono text-xs sm:text-sm resize-none"
+                className="min-h-[250px] sm:min-h-[300px] lg:min-h-[400px] font-mono text-xs sm:text-sm resize-none"
                 />
+                {normDiffs.length > 0 && validationResult && (
+                  <div className="mt-1">
+                    <button
+                      onClick={() => setNormExpanded(!normExpanded)}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                    >
+                      <span>{normDiffs.length} term{normDiffs.length !== 1 ? 's' : ''} normalized</span>
+                      <ChevronDown className={`h-3 w-3 transition-transform ${normExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                    {normExpanded && (
+                      <div className="mt-1 p-2 rounded border bg-muted/50 text-xs text-muted-foreground space-y-0.5 max-h-32 overflow-y-auto">
+                        {normDiffs.map((d, i) => (
+                          <div key={i}>
+                            <span className="line-through">{d.matched}</span>
+                            <span className="mx-1">→</span>
+                            <span className="font-medium text-foreground">{d.replacement}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                   <Button
                     onClick={handleValidate}
