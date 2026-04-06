@@ -752,6 +752,64 @@ const Index = () => {
                 </CardContent>
               </Card>
             )}
+
+            {/* Molecular Markers (AJCC 9th - optional, display-only) */}
+            {validationResult && (
+              <Collapsible open={markersOpen} onOpenChange={setMarkersOpen}>
+                <Card className="border border-muted">
+                  <CollapsibleTrigger asChild>
+                    <button className="w-full flex items-center gap-2 p-4 text-left hover:bg-muted/50 transition-colors rounded-t-lg">
+                      <FlaskConical className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span className="text-sm font-semibold text-foreground">Molecular Markers</span>
+                      <Badge variant="outline" className="ml-1 text-[10px]">Optional</Badge>
+                      <svg
+                        className={`ml-auto h-4 w-4 text-muted-foreground transition-transform duration-200 ${markersOpen ? 'rotate-180' : ''}`}
+                        xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="pt-0 pb-4 space-y-3">
+                      <p className="text-[10px] text-muted-foreground">Per AJCC 9th Edition, these fields are recorded but do NOT affect stage group.</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {(['egfr', 'alk', 'ros1', 'kras'] as const).map(marker => (
+                          <div key={marker} className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground uppercase">{marker === 'egfr' ? 'EGFR' : marker === 'alk' ? 'ALK' : marker === 'ros1' ? 'ROS1' : 'KRAS'}</label>
+                            <Select
+                              value={molecularMarkers[marker]}
+                              onValueChange={(v) => setMolecularMarkers(prev => ({ ...prev, [marker]: v as MolecularStatus }))}
+                            >
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="not_tested">Not Tested</SelectItem>
+                                <SelectItem value="positive">Positive</SelectItem>
+                                <SelectItem value="negative">Negative</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">PD-L1 TPS</label>
+                        <Select
+                          value={molecularMarkers.pdl1}
+                          onValueChange={(v) => setMolecularMarkers(prev => ({ ...prev, pdl1: v as PdL1Status }))}
+                        >
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="not_tested">Not Tested</SelectItem>
+                            <SelectItem value="<1%">&lt;1%</SelectItem>
+                            <SelectItem value="1-49%">1–49%</SelectItem>
+                            <SelectItem value="≥50%">≥50%</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+            )}
           </div>
         </div>
 
