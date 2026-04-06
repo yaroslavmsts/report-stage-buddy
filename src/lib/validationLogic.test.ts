@@ -1829,6 +1829,15 @@ Lymph nodes: level 4L positive (1/2).`;
       expect(r.stage_group).toBe('Stage IIB');
     });
 
+    it('negative subcarinal station does not upstage N and preserves Stage IIB + 60% survival', () => {
+      const r = run('Left lower lobe resection. Squamous cell carcinoma, 2.2 cm. Tumour invades the thoracic wall. Subcarinal lymph nodes negative. No distant metastasis.');
+      expect(r.t_category).toBe('pT3');
+      expect(r.n_category).toBe('pN0');
+      expect(r.m_category).toBe('pM0');
+      expect(r.stage_group).toBe('Stage IIB');
+      expect(r.survival?.five_year_survival).toBe('60%');
+    });
+
     it('T1a/N0/M0 → Stage IA1', () => {
       const r = run('Adenocarcinoma 0.8 cm. No pleural invasion. Lymph nodes negative. No distant metastasis.');
       expect(r.stage_group).toBe('Stage IA1');

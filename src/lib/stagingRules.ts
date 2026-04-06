@@ -367,26 +367,81 @@ export function getSizeBasedStage(size_cm: number): StagingRule | undefined {
   return undefined;
 }
 
-// Helper: count unique N2-level stations mentioned in text
+// Helper: identify local nodal negation around a station/keyword mention
+function isNegatedNodeMention(text: string, matchIndex: number): boolean {
+  const sentenceStart = Math.max(
+    text.lastIndexOf('.', matchIndex - 1),
+    text.lastIndexOf('\n', matchIndex - 1),
+    text.lastIndexOf(';', matchIndex - 1)
+  ) + 1;
+
+  const nextPeriod = text.indexOf('.', matchIndex);
+  const nextNewline = text.indexOf('\n', matchIndex);
+  const nextSemicolon = text.indexOf(';', matchIndex);
+  const sentenceEndCandidates = [nextPeriod, nextNewline, nextSemicolon].filter(index => index !== -1);
+  const sentenceEnd = sentenceEndCandidates.length > 0 ? Math.min(...sentenceEndCandidates) : text.length;
+
+  const sentence = text.slice(sentenceStart, sentenceEnd).toLowerCase();
+  const relativeIndex = matchIndex - sentenceStart;
+  const contextStart = Math.max(0, relativeIndex - 40);
+  const contextEnd = Math.min(sentence.length, relativeIndex + 80);
+  const context = sentence.slice(contextStart, contextEnd);
+
+  return [
+    /\bnegative\b/i,
+    /\bnodes?\s+negative\b/i,
+    /\bno\s+(?:lymph\s+node\s+)?metastas(?:is|es)\b/i,
+    /\bno\s+metastatic\s+carcinoma\b/i,
+    /\bwithout\s+metastas(?:is|es)\b/i,
+    /\bfree\s+of\s+metastas(?:is|es)\b/i,
+    /\buninvolved\b/i,
+    /\b0\s*\/\s*\d+\b/i,
+  ].some(pattern => pattern.test(context));
+}
+
+function hasNonNegatedKeyword(text: string, keyword: string): boolean {
+  const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(escapedKeyword, 'gi');
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (!isNegatedNodeMention(text, match.index)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Helper: count unique N2-level stations mentioned in non-negated positive text
 function countN2Stations(text: string): number {
   const stationSet = new Set<string>();
   const stationPattern = /(?:station|level)\s*(\d{1,2})[rl]?\b/gi;
   let match;
   while ((match = stationPattern.exec(text)) !== null) {
     const num = parseInt(match[1]);
-    if ([2, 4, 5, 6, 7, 8, 9].includes(num)) {
+    if ([2, 4, 5, 6, 7, 8, 9].includes(num) && !isNegatedNodeMention(text, match.index)) {
       stationSet.add(String(num));
     }
   }
-  // Named station mappings
-  if (/\bsubcarinal\b/i.test(text)) stationSet.add('7');
-  if (/\bparatracheal\b/i.test(text) && !stationSet.has('2') && !stationSet.has('4')) {
-    stationSet.add('paratracheal');
+
+  const namedMappings: Array<{ pattern: RegExp; station: string; predicate?: () => boolean }> = [
+    { pattern: /\bsubcarinal\b/gi, station: '7' },
+    { pattern: /\bparatracheal\b/gi, station: 'paratracheal', predicate: () => !stationSet.has('2') && !stationSet.has('4') },
+    { pattern: /\baortopulmonary\b/gi, station: '5_6' },
+    { pattern: /\bsubaortic\b/gi, station: '5_6' },
+    { pattern: /\bparaesophageal\b/gi, station: '8' },
+  ];
+
+  for (const { pattern, station, predicate } of namedMappings) {
+    let namedMatch: RegExpExecArray | null;
+    while ((namedMatch = pattern.exec(text)) !== null) {
+      if (!isNegatedNodeMention(text, namedMatch.index) && (!predicate || predicate())) {
+        stationSet.add(station);
+      }
+    }
   }
-  if (/\baortopulmonary\b/i.test(text) || /\bsubaortic\b/i.test(text)) {
-    stationSet.add('5_6');
-  }
-  if (/\bparaesophageal\b/i.test(text)) stationSet.add('8');
+
   return stationSet.size;
 }
 
@@ -410,68 +465,70 @@ function countOrgansWithMets(text: string): Set<string> {
 export function getNodeStage(text: string): { stage: string; criteria: string; subclassAmbiguous?: boolean } | null {
   const normalizedText = text.toLowerCase();
 
-  // N3 first (highest priority)
   const n3Rule = NODE_RULES.find(r => r.stage === 'pN3')!;
   for (const keyword of n3Rule.keywords) {
-    if (normalizedText.includes(keyword.toLowerCase())) {
+    if (hasNonNegatedKeyword(normalizedText, keyword.toLowerCase())) {
       return { stage: 'pN3', criteria: n3Rule.criteria };
     }
   }
 
-  // N2 detection using shared keywords, then subclassify
   let n2Detected = false;
   for (const keyword of N2_SHARED_KEYWORDS) {
-    if (normalizedText.includes(keyword)) {
+    if (hasNonNegatedKeyword(normalizedText, keyword)) {
       n2Detected = true;
       break;
     }
   }
-  // Also check N2a/N2b specific keywords
+
   const n2aRule = NODE_RULES.find(r => r.stage === 'pN2a')!;
   const n2bRule = NODE_RULES.find(r => r.stage === 'pN2b')!;
   for (const kw of n2aRule.keywords) {
-    if (normalizedText.includes(kw)) { n2Detected = true; break; }
+    if (hasNonNegatedKeyword(normalizedText, kw)) {
+      n2Detected = true;
+      break;
+    }
   }
   for (const kw of n2bRule.keywords) {
-    if (normalizedText.includes(kw)) { n2Detected = true; break; }
+    if (hasNonNegatedKeyword(normalizedText, kw)) {
+      n2Detected = true;
+      break;
+    }
   }
 
   if (n2Detected) {
-    // Check for explicit N2a/N2b keywords first
     for (const kw of n2bRule.keywords) {
-      if (normalizedText.includes(kw)) {
+      if (hasNonNegatedKeyword(normalizedText, kw)) {
         return { stage: 'pN2b', criteria: n2bRule.criteria };
       }
     }
     for (const kw of n2aRule.keywords) {
-      if (normalizedText.includes(kw)) {
+      if (hasNonNegatedKeyword(normalizedText, kw)) {
         return { stage: 'pN2a', criteria: n2aRule.criteria };
       }
     }
-    // Count unique N2-level stations for subclassification
+
     const stationCount = countN2Stations(normalizedText);
     if (stationCount === 1) {
       return { stage: 'pN2a', criteria: n2aRule.criteria };
-    } else if (stationCount >= 2) {
-      return { stage: 'pN2b', criteria: n2bRule.criteria };
-    } else {
-      return {
-        stage: 'pN2',
-        criteria: 'Metastasis in ipsilateral mediastinal and/or subcarinal lymph nodes (subclass not determined)',
-        subclassAmbiguous: true
-      };
     }
+    if (stationCount >= 2) {
+      return { stage: 'pN2b', criteria: n2bRule.criteria };
+    }
+
+    return {
+      stage: 'pN2',
+      criteria: 'Metastasis in ipsilateral mediastinal and/or subcarinal lymph nodes (subclass not determined)',
+      subclassAmbiguous: true
+    };
   }
 
-  // N1
   const n1Rule = NODE_RULES.find(r => r.stage === 'pN1')!;
   for (const keyword of n1Rule.keywords) {
-    if (normalizedText.includes(keyword.toLowerCase())) {
+    if (hasNonNegatedKeyword(normalizedText, keyword.toLowerCase())) {
       return { stage: 'pN1', criteria: n1Rule.criteria };
     }
   }
 
-  // N0
   const n0Rule = NODE_RULES.find(r => r.stage === 'pN0')!;
   for (const keyword of n0Rule.keywords) {
     if (normalizedText.includes(keyword.toLowerCase())) {
