@@ -1576,7 +1576,6 @@ describe('Normalization pre-pass', () => {
 
   it('getNormalizationDiff returns correct diff entries', () => {
     const diffs = getNormalizationDiff('Invasive tumour, VPI present, station 7 positive.');
-    const diffs = getNormalizationDiff('Invasive tumour, VPI present, station 7 positive.');
     const terms = diffs.map((d: any) => d.matched);
     expect(terms).toContain('tumour');
     expect(terms.some((t: string) => t.includes('VPI'))).toBe(true);
