@@ -5,8 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ValidationResult } from '@/components/ValidationResult';
 import { parsePathologyReport, runValidation, compareStages, getStagingSource } from '@/lib/validationLogic';
 import { STAGING_RULES } from '@/lib/stagingRules';
-import { Loader2, FileText, Shield, AlertTriangle, Database, ChevronDown, HelpCircle } from 'lucide-react';
+import { Loader2, FileText, Shield, AlertTriangle, Database, ChevronDown, HelpCircle, FlaskConical } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +18,35 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+
+const TUMOR_TYPES = [
+  { value: 'nsclc_adeno', label: 'NSCLC — Adenocarcinoma' },
+  { value: 'nsclc_squamous', label: 'NSCLC — Squamous Cell' },
+  { value: 'sclc', label: 'SCLC (Small Cell)' },
+  { value: 'typical_carcinoid', label: 'Typical Carcinoid' },
+  { value: 'atypical_carcinoid', label: 'Atypical Carcinoid' },
+  { value: 'lcnec', label: 'Large Cell Neuroendocrine' },
+  { value: 'other_nsclc', label: 'Other NSCLC' },
+] as const;
+
+type MolecularStatus = 'positive' | 'negative' | 'not_tested';
+type PdL1Status = '<1%' | '1-49%' | '≥50%' | 'not_tested';
+
+interface MolecularMarkers {
+  egfr: MolecularStatus;
+  alk: MolecularStatus;
+  ros1: MolecularStatus;
+  kras: MolecularStatus;
+  pdl1: PdL1Status;
+}
+
+const DEFAULT_MARKERS: MolecularMarkers = {
+  egfr: 'not_tested',
+  alk: 'not_tested',
+  ros1: 'not_tested',
+  kras: 'not_tested',
+  pdl1: 'not_tested',
+};
 
 // Sample reports demonstrating each Golden Rule
 const SAMPLE_REPORTS = {
