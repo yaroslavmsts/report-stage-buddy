@@ -1,3 +1,4 @@
+import { normalizeReportText } from './normalization';
 // AJCC 9th Edition Lung Cancer Full TNM Staging Validation Engine
 // SINGLE-PASS 4-GATE ARCHITECTURE v12.0.0
 // ============================================
@@ -1302,7 +1303,7 @@ export function detectMultiplePrimaryTumors(reportText: string): boolean {
   return false;
 }
 export function parsePathologyReport(reportText: string): ParsedReport {
-  const text = reportText.toLowerCase();
+  const text = normalizeReportText(reportText).toLowerCase();
   
   // Initialize default inputs
   const inputs: ValidationInputs = {
