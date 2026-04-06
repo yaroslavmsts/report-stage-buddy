@@ -1593,3 +1593,250 @@ describe('Normalization pre-pass', () => {
     expect(r.t_category).not.toBe('pT3');
   });
 });
+// ============================================================
+// POST-FIX VALIDATION TESTS
+// Verifies three critical fixes introduced in the AJCC 9th
+// Edition rebuild. These are regression tests — if any of
+// these fail after a future code change, something broke.
+//
+// Add this block to validationLogic.test.ts
+// ============================================================
+
+describe('Post-fix regression: AJCC 9th Edition critical fixes', () => {
+
+  // ----------------------------------------------------------
+  // CASE 1: N2b fires correctly (two named stations)
+  // Tests: N2a/N2b split, AJCC 9th stage group table
+  // T2a / N2b / M0 → Stage IIIB (was IIIB in 8th too, but
+  // via a different path — now N2b is the explicit reason)
+  // ----------------------------------------------------------
+  describe('Case 1: N2b detection — two named stations', () => {
+    const report = `Left upper lobe lobectomy. Squamous cell carcinoma, 4.0 cm.
+Level 4L and level 7 lymph nodes both positive for metastatic carcinoma.
+No distant metastasis.`;
+
+    it('T category is pT2a (4.0 cm ≤ 4.0 cm boundary)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT2a');
+    });
+
+    it('N category is pN2b (two named stations: 4L and 7)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.n_category).toBe('pN2b');
+    });
+
+    it('M category is pM0', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.m_category).toBe('pM0');
+    });
+
+    it('Stage group is Stage IIIB (T2a/N2b/M0 per AJCC 9th)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.stage_group).toBe('Stage IIIB');
+    });
+
+    it('N2b does NOT trigger N2a subclassification alert', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      // N2b is unambiguous — no alert should fire
+      expect(result.alerts?.some(a => a.includes('N2a') || a.includes('manual input'))).toBe(false);
+    });
+  });
+
+  // ----------------------------------------------------------
+  // CASE 2: Phrenic nerve → pT3 (not pT4)
+  // Tests: Bug 1 fix — phrenic nerve correct T assignment
+  // T3 / N0 / M0 → Stage IIB
+  // This was the most dangerous silent error in the 8th Ed
+  // engine: patients upstaged to IIIB instead of IIB
+  // ----------------------------------------------------------
+  describe('Case 2: Phrenic nerve → pT3, not pT4 (Bug 1 fix)', () => {
+    const report = `Left upper lobe lobectomy. Squamous cell carcinoma, 2.0 cm.
+Tumor invades the phrenic nerve. Lymph nodes negative (0/11).
+No distant metastasis.`;
+
+    it('T category is pT3 — phrenic nerve is pT3 per AJCC 8th and 9th', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT3');
+    });
+
+    it('T category is NOT pT4 (regression: was pT4 before bug fix)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).not.toBe('pT4');
+    });
+
+    it('N category is pN0', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.n_category).toBe('pN0');
+    });
+
+    it('M category is pM0', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.m_category).toBe('pM0');
+    });
+
+    it('Stage group is Stage IIB (T3/N0/M0), not IIIB', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.stage_group).toBe('Stage IIB');
+    });
+
+    it('basis is anatomical_override (phrenic nerve triggered Gate 1)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.basis).toBe('anatomical_override');
+    });
+
+    it('size (2.0 cm) was NOT used — overridden by phrenic nerve', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.size_basis_cm).toBeUndefined();
+    });
+
+    // Variant: "phrenic nerve involvement" phrasing
+    it('"phrenic nerve involvement" also → pT3, Stage IIB', () => {
+      const variant = `Right upper lobe lobectomy. Adenocarcinoma, 1.5 cm.
+Phrenic nerve involvement identified. Lymph nodes negative. No distant metastasis.`;
+      const parsed = parsePathologyReport(variant);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT3');
+      expect(result.stage_group).toBe('Stage IIB');
+    });
+
+    // Variant: normalization pre-pass — "phrenic" alone
+    it('"phrenic" alone (normalized to phrenic nerve) → pT3', () => {
+      const variant = `Squamous cell carcinoma 1.8 cm. Direct invasion of the phrenic.
+Lymph nodes negative. No distant metastasis.`;
+      const parsed = parsePathologyReport(variant);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT3');
+    });
+  });
+
+  // ----------------------------------------------------------
+  // CASE 3: pT4 + pM1a — M category not lost (Bug 3 fix)
+  // Tests: Gate 1 hard override no longer skips M detection
+  // T4 / N0 / M1a → Stage IVA
+  // Before fix: engine returned Stage IIIB (M1a silently dropped)
+  // ----------------------------------------------------------
+  describe('Case 3: pT4 invasion + contralateral nodule → Stage IVA (Bug 3 fix)', () => {
+    const report = `Right upper lobe lobectomy. Adenocarcinoma, 3.0 cm.
+Tumor invades the mediastinum. Separate nodule identified in left upper lobe.
+Lymph nodes negative.`;
+
+    it('T category is pT4 (mediastinal invasion → Gate 1 override)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+    });
+
+    it('M category is pM1a (contralateral nodule — NOT dropped by Gate 1)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.m_category).toBe('pM1a');
+    });
+
+    it('M category is NOT pM0 (regression: was pM0 before Bug 3 fix)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.m_category).not.toBe('pM0');
+    });
+
+    it('Stage group is Stage IVA (any T / any N / M1a)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.stage_group).toBe('Stage IVA');
+    });
+
+    it('Stage group is NOT Stage IIIB (regression: was IIIB before Bug 3 fix)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.stage_group).not.toBe('Stage IIIB');
+    });
+
+    it('N category is pN0', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.n_category).toBe('pN0');
+    });
+
+    // Variant: pT4 (heart invasion) + malignant pleural effusion → M1a
+    it('pT4 heart invasion + malignant pleural effusion → pM1a, Stage IVA', () => {
+      const variant = `Left lower lobe resection. Squamous cell carcinoma, 4.5 cm.
+Direct invasion into the heart. Malignant pleural effusion present.
+Lymph nodes negative.`;
+      const parsed = parsePathologyReport(variant);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+      expect(result.m_category).toBe('pM1a');
+      expect(result.stage_group).toBe('Stage IVA');
+    });
+
+    // Variant: pT4 + M1b (single extrathoracic met) → Stage IVA
+    it('pT4 + single extrathoracic metastasis → pM1b, Stage IVA', () => {
+      const variant = `Right lower lobe resection. Adenocarcinoma, 3.5 cm.
+Tumor invades the mediastinum. Single brain metastasis identified.
+Lymph nodes negative.`;
+      const parsed = parsePathologyReport(variant);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+      expect(result.m_category).toBe('pM1b');
+      expect(result.stage_group).toBe('Stage IVA');
+    });
+
+    // Variant: pT4 + M1c2 (multiple organ systems) → Stage IVB
+    it('pT4 + liver and bone metastases → pM1c2, Stage IVB', () => {
+      const variant = `Left upper lobe pneumonectomy. Squamous cell carcinoma, 6.0 cm.
+Tumor invades the mediastinum. Liver and bone metastases identified.
+Lymph nodes: level 4L positive (1/2).`;
+      const parsed = parsePathologyReport(variant);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT4');
+      expect(result.m_category).toBe('pM1c2');
+      expect(result.stage_group).toBe('Stage IVB');
+    });
+  });
+
+  // ----------------------------------------------------------
+  // COMBINED: all three fixes interact correctly
+  // Worst-case report: phrenic nerve (pT3) + two stations (N2b)
+  // + contralateral nodule (M1a) — tests full pipeline
+  // ----------------------------------------------------------
+  describe('Combined: all three fixes interact correctly', () => {
+    const report = `Left upper lobe lobectomy. Squamous cell carcinoma, 2.5 cm.
+Tumor invades the phrenic nerve. Level 4L and level 7 lymph nodes positive
+(2/3 and 1/2 respectively). Separate nodule in right upper lobe. No osseous metastasis.`;
+
+    it('T is pT3 (phrenic nerve, not pT4)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.t_category).toBe('pT3');
+    });
+
+    it('N is pN2b (two named stations)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.n_category).toBe('pN2b');
+    });
+
+    it('M is pM1a (contralateral nodule, not dropped)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.m_category).toBe('pM1a');
+    });
+
+    it('Stage group is Stage IVA (M1a overrides everything)', () => {
+      const parsed = parsePathologyReport(report);
+      const result = runValidation(parsed);
+      expect(result.stage_group).toBe('Stage IVA');
+    });
+  });
+});
