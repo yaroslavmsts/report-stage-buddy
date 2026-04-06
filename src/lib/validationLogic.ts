@@ -592,8 +592,10 @@ export function detectPT4Structures(
       patterns: [
         /invad(es?|ing|ed)\s*(the\s*)?heart/i,
         /cardiac\s*invasion/i,
+        /heart\s*invasion/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?heart/i,
         /involves?\s*(the\s*)?heart/i,
+        /extends?\s*(into|to)\s*(the\s*)?heart/i,
         // BRIDGE PATTERNS
         /invasion\b[^.]{0,80}\bheart/i,
         /invasion\b[^.]{0,80}\bcardiac/i,
