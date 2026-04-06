@@ -2004,12 +2004,15 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     // Also skip if it's part of "pericardial sac", "pericardial wall", "pericardial tissue" (already normalized)
     const following = reportText.substring(matchIndex, Math.min(reportText.length, matchIndex + 30)).toLowerCase();
     if (following.includes('pericardial sac') || following.includes('pericardial wall') || following.includes('pericardial tissue')) continue;
-    // Check if the sentence contains invasion language
+    // Check if the sentence contains invasion language AND is not negated
     const sentenceStart = reportText.lastIndexOf('.', matchIndex - 1) + 1;
     const sentenceEnd = reportText.indexOf('.', matchIndex);
     const sentence = reportText.substring(sentenceStart, sentenceEnd > 0 ? sentenceEnd : reportText.length).trim();
+    const lowerSentence = sentence.toLowerCase();
     const invasionLang = /\b(invad(es?|ing|ed)|invasion|involv(es?|ing|ed)|extend(s|ing|ed)?|infiltrat(es?|ing|ed)|penetrat(es?|ing|ed))\b/i;
-    if (invasionLang.test(sentence)) {
+    // Skip if the sentence is negated (e.g., "no pericardial invasion")
+    const negationLang = /\b(no|not|without|absent|negative|free of|ruled out|excluded)\b/i;
+    if (invasionLang.test(sentence) && !negationLang.test(lowerSentence)) {
       pericardiumAmbiguityConflicts.push({
         sentence: sentence,
         invasionKeyword: 'pericardium',
