@@ -883,11 +883,11 @@ describe('Integration: Deterministic Gated Engine', () => {
       expect(result.t_category).toBe('pT4');
     });
 
-    it('"invasion into the pleura and phrenic nerve" → pT4 (phrenic nerve bridge)', () => {
+    it('"invasion into the pleura and phrenic nerve" → pT3 (phrenic nerve is pT3)', () => {
       const report = 'Adenocarcinoma 2.5 cm. Direct invasion into the visceral pleura and phrenic nerve.';
       const parsed = parsePathologyReport(report);
       const result = runValidation(parsed);
-      expect(result.t_category).toBe('pT4');
+      expect(result.t_category).toBe('pT3');
     });
 
     it('"invasion extending to the soft tissue and diaphragm" → pT4 (diaphragm bridge)', () => {
@@ -1034,9 +1034,9 @@ describe('Bridge Pattern Consistency (Issue #1-4)', () => {
     const text = 'Tumor with invasion into mediastinal fat and phrenic nerve involvement, measuring 3.2 cm.';
     const result = parsePathologyReport(text);
     
-    // Both phrenic nerve (pT4) should be detected despite being in compound sentence
+    // Phrenic nerve is pT3 (not pT4); mediastinum is pT4
     expect(result.pT4Override.detected).toBe(true);
-    expect(result.pT4Override.structures).toContain('Phrenic Nerve');
+    expect(result.pT4Override.structures).toContain('Mediastinum');
   });
 
   it('should use 80-character bridge window consistently (pT3 and pT4 structures)', () => {
@@ -1096,11 +1096,11 @@ describe('Bridge Pattern Consistency (Issue #1-4)', () => {
 describe('Master Hierarchy Compliance', () => {
   // === REQUIREMENT 1: Circuit Breaker (Gate 1) ===
   describe('Req 1: Circuit Breaker - Anatomical overrides stop all calculations', () => {
-    it('phrenic nerve bridge → pT4, ignores 2.5cm size', () => {
+    it('phrenic nerve → pT3 (not pT4 per AJCC 9th)', () => {
       const text = 'Squamous cell carcinoma 2.5 cm. Direct invasion into the pleura and phrenic nerve.';
       const parsed = parsePathologyReport(text);
       const result = runValidation(parsed);
-      expect(result.t_category).toBe('pT4');
+      expect(result.t_category).toBe('pT3');
     });
 
     it('mediastinal fat bridge → pT4, ignores 3.0cm size', () => {
@@ -1205,10 +1205,9 @@ describe('Master Hierarchy Compliance', () => {
   // === REQUIREMENT 4: Hierarchy Priority Order ===
   describe('Req 4: Gate 1 beats Gate 2 beats Gate 4', () => {
     it('anatomical override (Gate 1) beats invasive size (Gate 2)', () => {
-      const text = 'Invasive adenocarcinoma with lepidic component 3.0 cm. Invasive component 0.4 cm. Direct invasion into the phrenic nerve.';
+      const text = 'Invasive adenocarcinoma with lepidic component 3.0 cm. Invasive component 0.4 cm. Direct invasion into the mediastinum.';
       const parsed = parsePathologyReport(text);
       const result = runValidation(parsed);
-      // Gate 1 (phrenic nerve → pT4) must override Gate 2 (0.4 cm → pT1mi)
       expect(result.t_category).toBe('pT4');
     });
 
