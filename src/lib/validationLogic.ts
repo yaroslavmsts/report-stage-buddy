@@ -2716,7 +2716,7 @@ ${gateDetail}`;
                 : 'No measurement extracted'),
       },
       anatomicalScan: {
-        status: (triggeredGate === 1) ? 'positive' : 'negative',
+        status: (triggeredGate === 1 || (triggeredGate === 99 && (pT4Override.detected || inputs.direct_invasion.phrenic_nerve || inputs.direct_invasion.chest_wall || inputs.direct_invasion.diaphragm))) ? 'positive' : 'negative',
         findings: {
           'Hilar Fat': inputs.direct_invasion.hilar_fat ? 'Positive' : 'Negative',
           'Chest Wall': inputs.direct_invasion.chest_wall ? 'Positive' : 'Negative',
