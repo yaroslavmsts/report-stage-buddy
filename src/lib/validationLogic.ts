@@ -2272,6 +2272,7 @@ export function parsePathologyReport(reportText: string): ParsedReport {
     reportedNStage, 
     reportedMStage, 
     rawText: reportText,
+    normalizedText,
     conflicts: allConflicts,
     hasConflict: allConflicts.length > 0,
     nodalStationAlerts,
@@ -2554,7 +2555,7 @@ export function computeConfidence(
 }
 
 export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean): ValidationResult {
-  const { inputs, rawText, ipsilateralLobeInfo, pT4Override, multiplePrimaryTumors } = parsedReport;
+  const { inputs, rawText, normalizedText, ipsilateralLobeInfo, pT4Override, multiplePrimaryTumors } = parsedReport;
   const effectiveHasConflict = hasConflict ?? parsedReport.hasConflict;
   
   // Initialize Gate Execution Tracking
@@ -2563,14 +2564,15 @@ export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean)
   // ============================================
   // EXTRACTION PHASE - Identify histology FIRST
   // ============================================
+  const textForDetection = normalizedText || rawText;
   const isAdenocarcinoma = 
     inputs.histology.is_invasive_nonmucinous_adenocarcinoma_with_lepidic_component ||
-    rawText.toLowerCase().includes('adenocarcinoma');
+    textForDetection.toLowerCase().includes('adenocarcinoma');
   
-  // Calculate N and M stages from raw text (these are lightweight keyword lookups, not detection)
-  const nResult = getNodeStage(rawText);
-  const mResult = getMetastasisStage(rawText);
-  const icd10Result = getICD10Code(rawText);
+  // Calculate N and M stages from normalized text
+  const nResult = getNodeStage(textForDetection);
+  const mResult = getMetastasisStage(textForDetection);
+  const icd10Result = getICD10Code(textForDetection);
   
   const n_category = nResult?.stage || 'pN0';
   let m_category = mResult?.stage || 'pM0';
