@@ -544,6 +544,23 @@ const Index = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 sm:space-y-4">
+                {/* Tumor Type Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Tumor Type</label>
+                  <Select value={tumorType} onValueChange={setTumorType}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select tumor type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TUMOR_TYPES.map(t => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground">
+                    AJCC 9th Edition TNM staging applies to all listed types. Not applicable to sarcomas, lymphomas, or mesothelioma.
+                  </p>
+                </div>
                 <Textarea
                   placeholder="Paste your pathology report here..."
                   value={reportText}
