@@ -1819,6 +1819,11 @@ Lymph nodes: level 4L positive (1/2).`;
   // Stage group table: AJCC 9th Edition regression
   // ----------------------------------------------------------
   describe('Stage group table: AJCC 9th Edition regression', () => {
+    const run = (text: string) => {
+      const parsed = parsePathologyReport(text);
+      return runValidation(parsed);
+    };
+
     it('T3/N0/M0 → Stage IIB (was returning IIIB — confirmed bug)', () => {
       const r = run('Squamous cell carcinoma 2.2 cm. Thoracic wall invasion. Lymph nodes negative. No distant metastasis.');
       expect(r.stage_group).toBe('Stage IIB');
