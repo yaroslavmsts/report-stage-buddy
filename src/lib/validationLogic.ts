@@ -1983,7 +1983,43 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   
   // Detect ambiguous phrases that require manual verification
   const ambiguityConflicts = detectAmbiguityPhrases(normalizedText);
-  const allConflicts = [...conflicts, ...ambiguityConflicts, ...directInvasionConflicts];
+
+  // ============================================
+  // PERICARDIUM AMBIGUITY DETECTION
+  // Unqualified "pericardium" / "pericardial" with invasion language
+  // but NOT preceded by "parietal" or "visceral" → ambiguity alert
+  // Scans ORIGINAL rawText (pre-normalization) to catch original wording
+  // ============================================
+  const pericardiumAmbiguityConflicts: ConflictInfo[] = [];
+  const pericardiumPattern = /\bpericardi(um|al)\b/gi;
+  let pericMatch: RegExpExecArray | null;
+  while ((pericMatch = pericardiumPattern.exec(reportText)) !== null) {
+    const matchIndex = pericMatch.index;
+    // Check preceding 30 chars for qualifiers
+    const preceding = reportText.substring(Math.max(0, matchIndex - 30), matchIndex).toLowerCase();
+    if (preceding.includes('parietal') || preceding.includes('visceral')) continue;
+    // Also skip if it's part of "pericardial sac", "pericardial wall", "pericardial tissue" (already normalized)
+    const following = reportText.substring(matchIndex, Math.min(reportText.length, matchIndex + 30)).toLowerCase();
+    if (following.includes('pericardial sac') || following.includes('pericardial wall') || following.includes('pericardial tissue')) continue;
+    // Check if the sentence contains invasion language
+    const sentenceStart = reportText.lastIndexOf('.', matchIndex - 1) + 1;
+    const sentenceEnd = reportText.indexOf('.', matchIndex);
+    const sentence = reportText.substring(sentenceStart, sentenceEnd > 0 ? sentenceEnd : reportText.length).trim();
+    const invasionLang = /\b(invad(es?|ing|ed)|invasion|involv(es?|ing|ed)|extend(s|ing|ed)?|infiltrat(es?|ing|ed)|penetrat(es?|ing|ed))\b/i;
+    if (invasionLang.test(sentence)) {
+      pericardiumAmbiguityConflicts.push({
+        sentence: sentence,
+        invasionKeyword: 'pericardium',
+        negationKeyword: 'unqualified — specify parietal (pT3) or visceral/epicardium (pT4)',
+        startIndex: matchIndex,
+        endIndex: matchIndex + pericMatch[0].length,
+        conflictType: 'ambiguity',
+      });
+      break; // One alert is enough
+    }
+  }
+
+  const allConflicts = [...conflicts, ...ambiguityConflicts, ...directInvasionConflicts, ...pericardiumAmbiguityConflicts];
 
   // ============================================
   // pT4 ANATOMICAL OVERRIDE DETECTION

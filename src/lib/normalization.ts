@@ -102,17 +102,23 @@ const GREAT_VESSELS_SYNONYMS: [RegExp, string][] = [
 ];
 
 // ============================================================
-// SECTION 6: HEART & PERICARDIUM (→ pT4)
+// SECTION 6: HEART & PERICARDIUM
+// Specific pericardial layers FIRST (pT3 vs pT4), then cardiac structures (pT4).
+// Bare "pericardium" is intentionally NOT normalized — handled as ambiguity alert
+// in validationLogic.ts when invasion language is present.
 // ============================================================
 const HEART_SYNONYMS: [RegExp, string][] = [
-  [/\bpericardium\b/gi,                           'heart'],
-  [/\bpericardial sac\b/gi,                       'heart'],
-  [/\bpericardial wall\b/gi,                      'heart'],
-  [/\bpericardial fat\b/gi,                       'heart'],
-  [/\bpericardial tissue\b/gi,                    'heart'],
-  [/\bparietal pericardium\b/gi,                  'parietal pericardium'], // pT3 — keep separate
+  // --- Specific pericardial layers (must come first) ---
+  [/\bparietal pericardium\b/gi,                  'parietal pericardium'], // pT3
   [/\bvisceral pericardium\b/gi,                  'heart'],               // pT4
-  [/\bepicardium\b/gi,                            'heart'],
+  [/\bepicardium\b/gi,                            'heart'],               // pT4 (visceral layer)
+  // --- Pericardial qualifiers → parietal (outer structures) ---
+  [/\bpericardial sac\b/gi,                       'parietal pericardium'], // sac = parietal layer → pT3
+  [/\bpericardial wall\b/gi,                      'parietal pericardium'], // outer wall = parietal → pT3
+  [/\bpericardial tissue\b/gi,                    'parietal pericardium'], // non-specific tissue → pT3
+  // --- pericardial fat: REMOVED — extrapericardial, not pT4 ---
+  // --- Bare "pericardium" / "pericardial": NOT normalized — ambiguity alert ---
+  // --- Cardiac structures (definite pT4) ---
   [/\bmyocardium\b/gi,                            'heart'],
   [/\bcardiac muscle\b/gi,                        'heart'],
   [/\bcardiac wall\b/gi,                          'heart'],
