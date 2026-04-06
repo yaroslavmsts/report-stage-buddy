@@ -591,7 +591,7 @@ export function getNodeStage(text: string): { stage: string; criteria: string; s
 
   // Biopsy specimen detection → pNx (biopsy specimens typically don't include nodal tissue)
   // Only triggers if NO explicit nodal staging info is present anywhere in the report
-  const BIOPSY_PATTERNS = /\b(?:biopsy|needle biopsy|core biopsy|wedge biopsy|transbronchial biopsy|endobronchial biopsy|ct[- ]?guided biopsy|fine needle aspirat)\b/i;
+  const BIOPSY_PATTERNS = /\b(?:biopsy|needle biopsy|core biopsy|wedge biopsy|transbronchial biopsy|endobronchial biopsy|ct[- ]?guided biopsy|fine needle aspirat\w*)\b/i;
   const HAS_NODAL_INFO = /\blymph\s*node|nodal\s*stag|\bstation\s*\d|\blevel\s*\d|\b\d+\s*\/\s*\d+\s*(?:lymph|node)|\bnodes?\s*(?:positive|negative|examined|sampled|submitted|received|identified)\b/i;
   if (BIOPSY_PATTERNS.test(normalizedText) && !HAS_NODAL_INFO.test(normalizedText)) {
     return { stage: 'pNx', criteria: 'Regional lymph nodes cannot be assessed (biopsy specimen — no nodal tissue submitted)' };

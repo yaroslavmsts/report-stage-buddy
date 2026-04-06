@@ -2623,7 +2623,7 @@ export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean)
   if (nResult) {
     n_category = nResult.stage;
   } else {
-    const BIOPSY_PATTERNS = /\b(?:biopsy|needle biopsy|core biopsy|wedge biopsy|transbronchial biopsy|endobronchial biopsy|ct[- ]?guided biopsy|fine needle aspirat)\b/i;
+    const BIOPSY_PATTERNS = /\b(?:biopsy|needle biopsy|core biopsy|wedge biopsy|transbronchial biopsy|endobronchial biopsy|ct[- ]?guided biopsy|fine needle aspirat\w*)\b/i;
     const HAS_NODAL_INFO = /\blymph\s*node|nodal\s*stag|\bstation\s*\d|\blevel\s*\d|\b\d+\s*\/\s*\d+\s*(?:lymph|node)|\bnodes?\s*(?:positive|negative|examined|sampled|submitted|received|identified)\b/i;
     if (BIOPSY_PATTERNS.test(textForDetection) && !HAS_NODAL_INFO.test(textForDetection)) {
       n_category = 'pNx';
