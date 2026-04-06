@@ -1642,8 +1642,8 @@ No distant metastasis.`;
     it('N2b does NOT trigger N2a subclassification alert', () => {
       const parsed = parsePathologyReport(report);
       const result = runValidation(parsed);
-      // N2b is unambiguous — no alert should fire
-      expect(result.alerts?.some(a => a.includes('N2a') || a.includes('manual input'))).toBe(false);
+      // N2b is unambiguous — no n2SubclassAlert should fire
+      expect(result.n2SubclassAlert).toBeUndefined();
     });
   });
 
