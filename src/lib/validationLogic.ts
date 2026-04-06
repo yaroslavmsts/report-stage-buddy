@@ -157,6 +157,8 @@ export interface ValidationResult {
   n_category: string | null;
   m_category: string | null;
   stage_group: string | null;
+  stage_provisional?: boolean;
+  stage_provisional_note?: string;
   survival: SurvivalData | null;
   icd10: ICD10Code | null;
   n2SubclassAlert?: string;
@@ -2682,9 +2684,20 @@ export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean)
 
     const pT2GroupingApplied = groupingTCategory !== finalTCategory && finalTCategory != null;
 
+    // Handle pNx: substitute N0 for stage lookup, flag as provisional
+    let stage_provisional = false;
+    let stage_provisional_note: string | undefined;
+    const isNx = /^pNx$/i.test(n_category);
+    
     const stage_group = groupingTCategory 
-      ? getStageGroup(groupingTCategory, n_category, m_category)
+      ? getStageGroup(groupingTCategory, isNx ? 'pN0' : n_category, m_category)
       : null;
+    
+    // M1 stages are definitive regardless of N — no provisional flag needed
+    if (isNx && stage_group && !/Stage IV/i.test(stage_group)) {
+      stage_provisional = true;
+      stage_provisional_note = 'Nodal status unknown (pNx) — stage assumes pN0. Verify with nodal sampling.';
+    }
     
     const survival = stage_group ? getSurvivalData(stage_group) : null;
     
@@ -2828,6 +2841,8 @@ ${gateDetail}`;
       n_category,
       m_category,
       stage_group,
+      stage_provisional,
+      stage_provisional_note,
       survival,
       icd10: icd10Result,
       basis,
