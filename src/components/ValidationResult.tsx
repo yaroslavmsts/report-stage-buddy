@@ -104,7 +104,7 @@ function getICDOMorphology(parsedReport: ParsedReport): { code: string; descript
   if (text.includes('mucinous adenocarcinoma')) {
     return { code: 'M8480/3', descriptor: 'Mucinous adenocarcinoma' };
   }
-  if (text.includes('adenocarcinoma in situ') || text.includes('ais')) {
+  if (text.includes('adenocarcinoma in situ') || /\bais\b/i.test(text)) {
     return { code: 'M8250/2', descriptor: 'Adenocarcinoma in situ, nonmucinous' };
   }
   if (text.includes('minimally invasive adenocarcinoma') || text.includes('mia')) {
