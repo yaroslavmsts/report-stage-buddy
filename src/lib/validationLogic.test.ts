@@ -2136,3 +2136,15 @@ describe('Biopsy specimen pNx detection', () => {
     expect(result.n_category).toBe('pNx');
   });
 });
+
+describe('Default N fallback is pNx (no nodal mention at all)', () => {
+  it('report with no lymph node mention → pNx', () => {
+    const result = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 2.0 cm. No distant metastasis.');
+    expect(result.n_category).toBe('pNx');
+  });
+
+  it('"lymph nodes negative" still returns pN0', () => {
+    const result = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 2.0 cm. Lymph nodes negative (0/12). No distant metastasis.');
+    expect(result.n_category).toBe('pN0');
+  });
+});
