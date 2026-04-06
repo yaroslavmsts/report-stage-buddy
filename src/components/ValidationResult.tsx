@@ -516,7 +516,25 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
                 {calculatedResult.m_category || 'N/A'}
               </p>
             </div>
-          </div>
+           </div>
+
+          {/* N2/M1c Subclassification Alerts */}
+          {(calculatedResult.n2SubclassAlert || calculatedResult.m1cSubclassAlert) && (
+            <div className="space-y-2">
+              {calculatedResult.n2SubclassAlert && (
+                <div className="p-2 rounded-lg bg-warning/10 border border-warning/30 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-foreground">{calculatedResult.n2SubclassAlert}</p>
+                </div>
+              )}
+              {calculatedResult.m1cSubclassAlert && (
+                <div className="p-2 rounded-lg bg-warning/10 border border-warning/30 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-foreground">{calculatedResult.m1cSubclassAlert}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Reported vs Calculated comparison */}
           <div className="grid grid-cols-2 gap-2 sm:gap-4 border-t pt-3 sm:pt-4">
