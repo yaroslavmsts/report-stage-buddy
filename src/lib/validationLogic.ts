@@ -2940,7 +2940,13 @@ ${gateDetail}`;
     gate1Detail = 'Invasion of: Phrenic Nerve → pT3';
   }
 
-  // SAFETY NET: diaphragm
+  // SAFETY NET: pericardium (parietal) → pT3 (AJCC 9th Edition)
+  if (!gate1Triggered && inputs.direct_invasion.pericardium) {
+    gate1Triggered = true;
+    gate1Stage = 'pT3';
+    gate1Detail = 'Invasion of: Pericardium (parietal) → pT3';
+  }
+
   if (!gate1Triggered && inputs.direct_invasion.diaphragm) {
     gate1Triggered = true;
     gate1Stage = 'pT4';
