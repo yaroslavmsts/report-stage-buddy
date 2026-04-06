@@ -655,7 +655,7 @@ const Index = () => {
                   <div className="text-xs sm:text-sm text-muted-foreground min-w-0 flex-1">
                     <p className="font-medium text-foreground mb-1">Validation Scope</p>
                     <p className="mb-2 text-xs sm:text-sm">
-                      This tool validates T staging for lung adenocarcinoma according to AJCC 8th Edition criteria:
+                      This tool validates T staging for lung cancer (NSCLC, SCLC, carcinoid, LCNEC) according to AJCC 9th Edition criteria:
                     </p>
                     <ul className="space-y-1 text-[10px] sm:text-xs">
                       {STAGING_RULES.rules.map((rule) => (
