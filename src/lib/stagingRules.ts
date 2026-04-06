@@ -163,14 +163,12 @@ export const STAGE_GROUPS: StageGroup[] = [
   // Stage IIA
   { group: "Stage IIA", t: ["T2b"], n: ["N0"], m: ["M0"] },
 
-  // Stage IIB
+  // Stage IIB — AJCC 9th: T1a-T2b/N2a/M0 all map here (was IIIA in 8th)
   { group: "Stage IIB", t: ["T1a", "T1b", "T1c", "T2a", "T2b"], n: ["N1"], m: ["M0"] },
   { group: "Stage IIB", t: ["T3"], n: ["N0"], m: ["M0"] },
-  { group: "Stage IIB", t: ["T1c"], n: ["N2a"], m: ["M0"] }, // NEW in 9th (was IIIA)
+  { group: "Stage IIB", t: ["T1a", "T1b", "T1c", "T2a", "T2b"], n: ["N2a"], m: ["M0"] },
 
   // Stage IIIA
-  { group: "Stage IIIA", t: ["T1a", "T1b"], n: ["N2a"], m: ["M0"] },
-  { group: "Stage IIIA", t: ["T2a", "T2b"], n: ["N2a"], m: ["M0"] },
   { group: "Stage IIIA", t: ["T3"], n: ["N1"], m: ["M0"] },
   { group: "Stage IIIA", t: ["T4"], n: ["N0", "N1"], m: ["M0"] },
 
@@ -572,15 +570,29 @@ export function getStageGroup(tStage: string, nStage: string, mStage: string): s
 }
 
 // Get ICD-10 code based on tumor site
+// Priority: lobe-specific codes first, then main bronchus, then fallback.
+// Strip lymph node station text to avoid false "bronchus" matches from normalization.
 export function getICD10Code(text: string): ICD10Code {
-  const normalizedText = text.toLowerCase();
+  // Remove lymph node / station context that may contain "bronchus" after normalization
+  const siteText = text
+    .replace(/\b(level\s+\d+[A-Za-z]?\s+lymph\s+node|subcarinal\s+lymph\s+node|lymph\s+node[s]?\s+(negative|positive|metastasis|unremarkable)|nodal\s+[a-z]+)/gi, '')
+    .toLowerCase();
 
-  for (const code of ICD10_CODES) {
-    if (code.code === 'C34.9') continue;
+  // Check lobe-specific codes FIRST (C34.1, C34.2, C34.3, C34.8)
+  const lobeCodes = ICD10_CODES.filter(c => ['C34.1', 'C34.2', 'C34.3', 'C34.8'].includes(c.code));
+  for (const code of lobeCodes) {
     for (const keyword of code.keywords) {
-      if (normalizedText.includes(keyword.toLowerCase())) {
+      if (siteText.includes(keyword.toLowerCase())) {
         return code;
       }
+    }
+  }
+
+  // Then check main bronchus (C34.0)
+  const mainBronchus = ICD10_CODES.find(c => c.code === 'C34.0')!;
+  for (const keyword of mainBronchus.keywords) {
+    if (siteText.includes(keyword.toLowerCase())) {
+      return mainBronchus;
     }
   }
 
