@@ -490,7 +490,7 @@ export function getNodeStage(text: string): { stage: string; criteria: string; s
     }
   }
 
-
+  const n3Rule = NODE_RULES.find(r => r.stage === 'pN3')!;
   for (const keyword of n3Rule.keywords) {
     if (hasNonNegatedKeyword(normalizedText, keyword.toLowerCase())) {
       return { stage: 'pN3', criteria: n3Rule.criteria };
