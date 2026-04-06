@@ -2841,6 +2841,8 @@ ${gateDetail}`;
       n_category,
       m_category,
       stage_group,
+      stage_provisional,
+      stage_provisional_note,
       survival,
       icd10: icd10Result,
       basis,
