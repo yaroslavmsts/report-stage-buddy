@@ -2022,3 +2022,40 @@ describe('Pericardium normalization and ambiguity detection', () => {
     expect(result.t_category).toBe('pT4');
   });
 });
+
+describe('pNx detection — nodes not submitted', () => {
+  it('"no lymph nodes submitted" → pNx', () => {
+    const report = 'Right upper lobe wedge resection. Adenocarcinoma, 1.5 cm. No lymph nodes submitted. No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pNx');
+  });
+
+  it('"lymph nodes not sampled" → pNx', () => {
+    const report = 'Left lower lobe resection. Squamous cell carcinoma, 3.0 cm. Lymph nodes not sampled. No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pNx');
+  });
+
+  it('"nodal assessment not performed" → pNx', () => {
+    const report = 'Right lower lobe resection. Adenocarcinoma, 2.0 cm. Nodal assessment not performed. No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pNx');
+  });
+
+  it('positive nodes override pNx phrases', () => {
+    const report = 'Right upper lobe lobectomy. Adenocarcinoma, 2.0 cm. No lymph nodes submitted from level 4. Station 7 positive (2/5). No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.n_category).not.toBe('pNx');
+  });
+
+  it('"lymph nodes negative" → pN0 (not pNx)', () => {
+    const report = 'Right upper lobe lobectomy. Adenocarcinoma, 2.0 cm. Lymph nodes negative. No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pN0');
+  });
+});
