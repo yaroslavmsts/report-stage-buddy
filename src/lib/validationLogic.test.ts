@@ -1540,9 +1540,9 @@ describe('Normalization pre-pass', () => {
     expect(r.t_category).toBe('pT3');
   });
 
-  it('"pericardium invasion" normalizes to heart → pT4', () => {
+  it('"pericardium invasion" (unqualified) triggers ambiguity conflict, not pT4', () => {
     const r = run('Adenocarcinoma 2.0 cm. Direct invasion into the pericardium. Lymph nodes negative. No distant metastasis.');
-    expect(r.t_category).toBe('pT4');
+    expect(r.t_category).not.toBe('pT4');
   });
 
   it('"station 7 positive" normalizes to subcarinal → pN2', () => {

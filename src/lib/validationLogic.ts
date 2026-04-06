@@ -1727,12 +1727,15 @@ export function parsePathologyReport(reportText: string): ParsedReport {
       patterns: [
         /invad(es?|ing|ed)\s*(the\s*)?pericardium/i,
         /pericardial\s*invasion/i,
+        /pericardium\s*invasion/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?pericardium/i,
         /extends?\s*(into|to)\s*(the\s*)?pericardium/i,
+        /parietal\s*pericardium\s*invasion/i,
+        /invad(es?|ing|ed)\s*(the\s*)?parietal\s*pericardium/i,
         // BRIDGE PATTERNS
         /invasion\b[^.]{0,80}\bpericardi(um|al)/i,
       ],
-      keywords: ['pericardial invasion', 'pericardium']
+      keywords: ['pericardial invasion', 'pericardium invasion', 'parietal pericardium']
     },
     main_bronchus: {
       patterns: [
