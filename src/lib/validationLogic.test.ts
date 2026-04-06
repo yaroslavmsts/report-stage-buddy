@@ -1560,7 +1560,6 @@ describe('Normalization pre-pass', () => {
   });
 
   it('"osseous metastasis" normalizes to bone metastasis', () => {
-    const { normalizeReportText } = require('./normalization') as any;
     const normalized = normalizeReportText('Single osseous metastasis identified.');
     expect(normalized).toContain('bone metastasis');
   });
