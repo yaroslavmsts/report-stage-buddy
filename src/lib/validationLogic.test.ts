@@ -1540,9 +1540,9 @@ describe('Normalization pre-pass', () => {
     expect(r.t_category).toBe('pT3');
   });
 
-  it('"pericardium invasion" normalizes to heart → pT4', () => {
+  it('"pericardium invasion" (unqualified) triggers ambiguity conflict, not pT4', () => {
     const r = run('Adenocarcinoma 2.0 cm. Direct invasion into the pericardium. Lymph nodes negative. No distant metastasis.');
-    expect(r.t_category).toBe('pT4');
+    expect(r.t_category).not.toBe('pT4');
   });
 
   it('"station 7 positive" normalizes to subcarinal → pN2', () => {
@@ -1957,5 +1957,68 @@ Tumor invades the phrenic nerve. Level 4L and level 7 lymph nodes positive
       const result = runValidation(parsed);
       expect(result.stage_group).toBe('Stage IVA');
     });
+  });
+});
+
+// ============================================
+// PERICARDIUM NORMALIZATION — AJCC 9th Edition pT3/pT4 distinction
+// ============================================
+describe('Pericardium normalization and ambiguity detection', () => {
+  it('unqualified "invasion into the pericardium" → NOT pT4, triggers ambiguity conflict', () => {
+    const report = 'Left upper lobe lobectomy. Squamous cell carcinoma, 3.0 cm. Invasion into the pericardium. Lymph nodes negative. No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    // Should NOT be pT4 — bare pericardium is ambiguous
+    expect(result.t_category).not.toBe('pT4');
+    // Should trigger an ambiguity conflict
+    expect(parsed.hasConflict).toBe(true);
+    expect(parsed.conflicts.some(c => c.invasionKeyword === 'pericardium' && c.conflictType === 'ambiguity')).toBe(true);
+  });
+
+  it('"parietal pericardium invasion" → pT3, no ambiguity', () => {
+    const report = 'Left upper lobe lobectomy. Squamous cell carcinoma, 2.0 cm. Parietal pericardium invasion. Lymph nodes negative. No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.t_category).toBe('pT3');
+    expect(parsed.conflicts.some(c => c.invasionKeyword === 'pericardium' && c.conflictType === 'ambiguity')).toBe(false);
+  });
+
+  it('"visceral pericardium invasion" → pT4, no ambiguity', () => {
+    const report = 'Left upper lobe lobectomy. Squamous cell carcinoma, 2.0 cm. Visceral pericardium invasion. Lymph nodes negative. No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.t_category).toBe('pT4');
+    expect(parsed.conflicts.some(c => c.invasionKeyword === 'pericardium' && c.conflictType === 'ambiguity')).toBe(false);
+  });
+
+  it('"pericardial sac invasion" → pT3 (not pT4)', () => {
+    const report = 'Left upper lobe lobectomy. Squamous cell carcinoma, 2.0 cm. Pericardial sac invasion. Lymph nodes negative. No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.t_category).toBe('pT3');
+  });
+
+  it('"pericardial fat invasion" → no pT4 override (extrapericardial)', () => {
+    const report = 'Left upper lobe lobectomy. Squamous cell carcinoma, 2.0 cm. Pericardial fat invasion. Lymph nodes negative. No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.t_category).not.toBe('pT4');
+  });
+
+  it('"no pericardial invasion" → negated, no override, no ambiguity', () => {
+    const report = 'Left upper lobe lobectomy. Squamous cell carcinoma, 2.0 cm. No pericardial invasion. Lymph nodes negative. No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.t_category).not.toBe('pT4');
+    expect(result.t_category).not.toBe('pT3');
+    // No ambiguity alert for negated mentions
+    expect(parsed.conflicts.some(c => c.invasionKeyword === 'pericardium' && c.conflictType === 'ambiguity')).toBe(false);
+  });
+
+  it('"epicardium invasion" → pT4 (visceral layer)', () => {
+    const report = 'Left upper lobe lobectomy. Squamous cell carcinoma, 2.0 cm. Epicardium invasion. Lymph nodes negative. No distant metastasis.';
+    const parsed = parsePathologyReport(report);
+    const result = runValidation(parsed);
+    expect(result.t_category).toBe('pT4');
   });
 });

@@ -592,8 +592,10 @@ export function detectPT4Structures(
       patterns: [
         /invad(es?|ing|ed)\s*(the\s*)?heart/i,
         /cardiac\s*invasion/i,
+        /heart\s*invasion/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?heart/i,
         /involves?\s*(the\s*)?heart/i,
+        /extends?\s*(into|to)\s*(the\s*)?heart/i,
         // BRIDGE PATTERNS
         /invasion\b[^.]{0,80}\bheart/i,
         /invasion\b[^.]{0,80}\bcardiac/i,
@@ -1727,12 +1729,15 @@ export function parsePathologyReport(reportText: string): ParsedReport {
       patterns: [
         /invad(es?|ing|ed)\s*(the\s*)?pericardium/i,
         /pericardial\s*invasion/i,
+        /pericardium\s*invasion/i,
         /direct\s*invasion\s*(of|into)\s*(the\s*)?pericardium/i,
         /extends?\s*(into|to)\s*(the\s*)?pericardium/i,
+        /parietal\s*pericardium\s*invasion/i,
+        /invad(es?|ing|ed)\s*(the\s*)?parietal\s*pericardium/i,
         // BRIDGE PATTERNS
         /invasion\b[^.]{0,80}\bpericardi(um|al)/i,
       ],
-      keywords: ['pericardial invasion', 'pericardium']
+      keywords: ['pericardial invasion', 'pericardium invasion', 'parietal pericardium']
     },
     main_bronchus: {
       patterns: [
@@ -1983,7 +1988,46 @@ export function parsePathologyReport(reportText: string): ParsedReport {
   
   // Detect ambiguous phrases that require manual verification
   const ambiguityConflicts = detectAmbiguityPhrases(normalizedText);
-  const allConflicts = [...conflicts, ...ambiguityConflicts, ...directInvasionConflicts];
+
+  // ============================================
+  // PERICARDIUM AMBIGUITY DETECTION
+  // Unqualified "pericardium" / "pericardial" with invasion language
+  // but NOT preceded by "parietal" or "visceral" → ambiguity alert
+  // Scans ORIGINAL rawText (pre-normalization) to catch original wording
+  // ============================================
+  const pericardiumAmbiguityConflicts: ConflictInfo[] = [];
+  const pericardiumPattern = /\bpericardi(um|al)\b/gi;
+  let pericMatch: RegExpExecArray | null;
+  while ((pericMatch = pericardiumPattern.exec(reportText)) !== null) {
+    const matchIndex = pericMatch.index;
+    // Check preceding 30 chars for qualifiers
+    const preceding = reportText.substring(Math.max(0, matchIndex - 30), matchIndex).toLowerCase();
+    if (preceding.includes('parietal') || preceding.includes('visceral')) continue;
+    // Also skip if it's part of "pericardial sac", "pericardial wall", "pericardial tissue" (already normalized)
+    const following = reportText.substring(matchIndex, Math.min(reportText.length, matchIndex + 30)).toLowerCase();
+    if (following.includes('pericardial sac') || following.includes('pericardial wall') || following.includes('pericardial tissue')) continue;
+    // Check if the sentence contains invasion language AND is not negated
+    const sentenceStart = reportText.lastIndexOf('.', matchIndex - 1) + 1;
+    const sentenceEnd = reportText.indexOf('.', matchIndex);
+    const sentence = reportText.substring(sentenceStart, sentenceEnd > 0 ? sentenceEnd : reportText.length).trim();
+    const lowerSentence = sentence.toLowerCase();
+    const invasionLang = /\b(invad(es?|ing|ed)|invasion|involv(es?|ing|ed)|extend(s|ing|ed)?|infiltrat(es?|ing|ed)|penetrat(es?|ing|ed))\b/i;
+    // Skip if the sentence is negated (e.g., "no pericardial invasion")
+    const negationLang = /\b(no|not|without|absent|negative|free of|ruled out|excluded)\b/i;
+    if (invasionLang.test(sentence) && !negationLang.test(lowerSentence)) {
+      pericardiumAmbiguityConflicts.push({
+        sentence: sentence,
+        invasionKeyword: 'pericardium',
+        negationKeyword: 'unqualified — specify parietal (pT3) or visceral/epicardium (pT4)',
+        startIndex: matchIndex,
+        endIndex: matchIndex + pericMatch[0].length,
+        conflictType: 'ambiguity',
+      });
+      break; // One alert is enough
+    }
+  }
+
+  const allConflicts = [...conflicts, ...ambiguityConflicts, ...directInvasionConflicts, ...pericardiumAmbiguityConflicts];
 
   // ============================================
   // pT4 ANATOMICAL OVERRIDE DETECTION
@@ -2898,7 +2942,13 @@ ${gateDetail}`;
     gate1Detail = 'Invasion of: Phrenic Nerve → pT3';
   }
 
-  // SAFETY NET: diaphragm
+  // SAFETY NET: pericardium (parietal) → pT3 (AJCC 9th Edition)
+  if (!gate1Triggered && inputs.direct_invasion.pericardium) {
+    gate1Triggered = true;
+    gate1Stage = 'pT3';
+    gate1Detail = 'Invasion of: Pericardium (parietal) → pT3';
+  }
+
   if (!gate1Triggered && inputs.direct_invasion.diaphragm) {
     gate1Triggered = true;
     gate1Stage = 'pT4';
