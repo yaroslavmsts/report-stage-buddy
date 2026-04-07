@@ -93,7 +93,7 @@ export const NODE_RULES: NodeRule[] = [
   {
     stage: "pN1",
     criteria: "Metastasis in ipsilateral peribronchial and/or ipsilateral hilar lymph nodes, OR direct invasion of peribronchial/hilar lymph node by primary tumor",
-    keywords: ["ipsilateral hilar", "peribronchial", "hilar lymph node metastasis", "n1 node", "level 10", "level 11", "level 12", "level 13", "level 14", "direct invasion of lymph node", "directly invades lymph node", "tumor invades hilar lymph node", "tumor invades peribronchial lymph node", "direct extension into lymph node", "directly involves lymph node"]
+    keywords: ["ipsilateral hilar", "peribronchial", "hilar lymph node metastasis", "lymph nodes metastasis in", "nodal metastasis in hilar", "metastasis in hilar nodes", "positive hilar nodes", "hilar node metastasis", "hilar nodes positive", "n1 node", "level 10", "level 11", "level 12", "level 13", "level 14", "direct invasion of lymph node", "directly invades lymph node", "tumor invades hilar lymph node", "tumor invades peribronchial lymph node", "direct extension into lymph node", "directly involves lymph node"]
   },
   {
     stage: "pN2a",
