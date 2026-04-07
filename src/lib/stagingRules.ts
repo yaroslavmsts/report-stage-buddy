@@ -563,6 +563,22 @@ export function getNodeStage(text: string): { stage: string; criteria: string; s
     }
   }
 
+  // Regex catch-all: X/Y node count with station name (where X > 0)
+  // N1 stations: hilar, peribronchial, level 10-14
+  const n1CountPattern = /(\d+)\s*\/\s*(\d+)\s*(?:hilar|peribronchial|level\s*1[0-4])/i;
+  const n1CountMatch = normalizedText.match(n1CountPattern);
+  if (n1CountMatch && parseInt(n1CountMatch[1]) > 0) {
+    return { stage: 'pN1', criteria: n1Rule.criteria };
+  }
+
+  // N2 stations: mediastinal, subcarinal, level 2-9
+  const n2CountPattern = /(\d+)\s*\/\s*(\d+)\s*(?:mediastinal|subcarinal|level\s*[2-9]\b)/i;
+  const n2CountMatch = normalizedText.match(n2CountPattern);
+  if (n2CountMatch && parseInt(n2CountMatch[1]) > 0) {
+    const n2aRule = NODE_RULES.find(r => r.stage === 'pN2a')!;
+    return { stage: 'pN2a', criteria: n2aRule.criteria };
+  }
+
   // pNx detection — nodes not submitted / not sampled / not examined
   // Placed AFTER N3/N2/N1 so positive nodes always take precedence
   const NX_PHRASES = [
