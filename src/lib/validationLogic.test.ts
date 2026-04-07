@@ -2224,3 +2224,47 @@ describe('pNx provisional staging', () => {
     expect(result.stage_provisional).toBeFalsy();
   });
 });
+
+describe('pN1 keyword and count pattern detection', () => {
+  it('"Lymph nodes show metastasis in 2/5 hilar nodes" → pN1', () => {
+    const parsed = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 2.0 cm. Lymph nodes show metastasis in 2/5 hilar nodes. No distant metastasis.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pN1');
+  });
+
+  it('"Lymph nodes metastasis in 2/5 hilar nodes" → pN1', () => {
+    const parsed = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 2.0 cm. Lymph nodes metastasis in 2/5 hilar nodes. No distant metastasis.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pN1');
+  });
+
+  it('"Hilar lymph node positive (1/3)" → pN1', () => {
+    const parsed = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 2.0 cm. Hilar lymph node positive (1/3). No distant metastasis.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pN1');
+  });
+
+  it('"Subcarinal node positive (2/4)" → pN2', () => {
+    const parsed = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 2.0 cm. Subcarinal node positive (2/4). No distant metastasis.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toMatch(/pN2/);
+  });
+
+  it('"Lymph nodes negative (0/12)" → pN0', () => {
+    const parsed = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 2.0 cm. Lymph nodes negative (0/12). No distant metastasis.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pN0');
+  });
+
+  it('"No lymph nodes submitted" → pNx', () => {
+    const parsed = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 2.0 cm. No lymph nodes submitted. No distant metastasis.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pNx');
+  });
+
+  it('No nodal mention → pNx', () => {
+    const parsed = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 2.0 cm. No distant metastasis.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pNx');
+  });
+});
