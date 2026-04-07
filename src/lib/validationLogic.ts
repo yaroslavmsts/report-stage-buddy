@@ -2620,18 +2620,12 @@ export function runValidation(parsedReport: ParsedReport, hasConflict?: boolean)
   const mResult = getMetastasisStage(textForDetection);
   const icd10Result = getICD10Code(textForDetection);
   
-  // If getNodeStage returned null, check for biopsy specimen before defaulting to pN0
+  // Use detected nodal stage when present; otherwise default to pNx only when no nodal match exists
   let n_category: string;
   if (nResult) {
     n_category = nResult.stage;
   } else {
-    const BIOPSY_PATTERNS = /\b(?:biopsy|needle biopsy|core biopsy|wedge biopsy|transbronchial biopsy|endobronchial biopsy|ct[- ]?guided biopsy|fine needle aspirat\w*)\b/i;
-    const HAS_NODAL_INFO = /\blymph\s*node|nodal\s*stag|\bstation\s*\d|\blevel\s*\d|\b\d+\s*\/\s*\d+\s*(?:lymph|node)|\bnodes?\s*(?:positive|negative|examined|sampled|submitted|received|identified)\b/i;
-    if (BIOPSY_PATTERNS.test(textForDetection) && !HAS_NODAL_INFO.test(textForDetection)) {
-      n_category = 'pNx';
-    } else {
-      n_category = 'pNx';
-    }
+    n_category = 'pNx';
   }
   let m_category = mResult?.stage || 'pM0';
   

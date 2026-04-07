@@ -2151,6 +2151,38 @@ describe('Default N fallback is pNx (no nodal mention at all)', () => {
   });
 });
 
+describe('N-stage precedence regression', () => {
+  it('"Lymph nodes metastasis in 2/5 hilar nodes" → pN1', () => {
+    const parsed = parsePathologyReport('Lymph nodes metastasis in 2/5 hilar nodes.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pN1');
+  });
+
+  it('"Subcarinal lymph node positive (1/3)" → pN2a', () => {
+    const parsed = parsePathologyReport('Subcarinal lymph node positive (1/3).');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pN2a');
+  });
+
+  it('"Lymph nodes negative (0/12)" → pN0', () => {
+    const parsed = parsePathologyReport('Lymph nodes negative (0/12).');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pN0');
+  });
+
+  it('"No lymph nodes submitted" → pNx', () => {
+    const parsed = parsePathologyReport('No lymph nodes submitted.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pNx');
+  });
+
+  it('no nodal mention at all → pNx', () => {
+    const parsed = parsePathologyReport('Left lower lobe resection. Squamous cell carcinoma, 2.2 cm. No distant metastasis.');
+    const result = runValidation(parsed);
+    expect(result.n_category).toBe('pNx');
+  });
+});
+
 describe('pNx provisional staging', () => {
   it('pT1b / pNx / pM0 → Stage IA2 provisional', () => {
     const parsed = parsePathologyReport('Right upper lobe lobectomy. Adenocarcinoma, 1.5 cm. No distant metastasis.');
