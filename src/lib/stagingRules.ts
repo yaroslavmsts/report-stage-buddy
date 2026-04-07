@@ -93,7 +93,7 @@ export const NODE_RULES: NodeRule[] = [
   {
     stage: "pN1",
     criteria: "Metastasis in ipsilateral peribronchial and/or ipsilateral hilar lymph nodes, OR direct invasion of peribronchial/hilar lymph node by primary tumor",
-    keywords: ["ipsilateral hilar", "peribronchial", "hilar lymph node metastasis", "lymph nodes metastasis in", "nodal metastasis in hilar", "metastasis in hilar nodes", "positive hilar nodes", "hilar node metastasis", "hilar nodes positive", "n1 node", "level 10", "level 11", "level 12", "level 13", "level 14", "direct invasion of lymph node", "directly invades lymph node", "tumor invades hilar lymph node", "tumor invades peribronchial lymph node", "direct extension into lymph node", "directly involves lymph node"]
+    keywords: ["ipsilateral hilar", "peribronchial", "hilar lymph node metastasis", "hilar lymph node positive", "hilar lymph nodes positive", "lymph nodes metastasis in", "nodal metastasis in hilar", "metastasis in hilar nodes", "positive hilar nodes", "hilar node metastasis", "hilar nodes positive", "hilar node positive", "positive hilar", "involved hilar", "hilar involvement", "show metastasis in", "shows metastasis in", "metastasis in hilar", "positive for metastatic carcinoma in hilar", "n1 node", "level 10", "level 11", "level 12", "level 13", "level 14", "direct invasion of lymph node", "directly invades lymph node", "tumor invades hilar lymph node", "tumor invades peribronchial lymph node", "direct extension into lymph node", "directly involves lymph node"]
   },
   {
     stage: "pN2a",
@@ -561,6 +561,22 @@ export function getNodeStage(text: string): { stage: string; criteria: string; s
     if (hasNonNegatedKeyword(normalizedText, keyword.toLowerCase())) {
       return { stage: 'pN1', criteria: n1Rule.criteria };
     }
+  }
+
+  // Regex catch-all: X/Y node count with station name (where X > 0)
+  // N1 stations: hilar, peribronchial, level 10-14
+  const n1CountPattern = /(\d+)\s*\/\s*(\d+)\s*(?:hilar|peribronchial|level\s*1[0-4])/i;
+  const n1CountMatch = normalizedText.match(n1CountPattern);
+  if (n1CountMatch && parseInt(n1CountMatch[1]) > 0) {
+    return { stage: 'pN1', criteria: n1Rule.criteria };
+  }
+
+  // N2 stations: mediastinal, subcarinal, level 2-9
+  const n2CountPattern = /(\d+)\s*\/\s*(\d+)\s*(?:mediastinal|subcarinal|level\s*[2-9]\b)/i;
+  const n2CountMatch = normalizedText.match(n2CountPattern);
+  if (n2CountMatch && parseInt(n2CountMatch[1]) > 0) {
+    const n2aRule = NODE_RULES.find(r => r.stage === 'pN2a')!;
+    return { stage: 'pN2a', criteria: n2aRule.criteria };
   }
 
   // pNx detection — nodes not submitted / not sampled / not examined
