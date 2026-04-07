@@ -632,17 +632,6 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
         />
       )}
 
-      {/* ============================================================
-          SECTION 5: DETAILED FINDINGS (CHECKLIST)
-          ============================================================ */}
-      {calculatedResult.clinicalChecklist && (
-        <ClinicalChecklist
-          items={buildChecklistItems(calculatedResult.clinicalChecklist)}
-          clinicalVerdict={calculatedResult.clinicalChecklist.clinicalVerdict}
-          stagingBasis={calculatedResult.clinicalChecklist.stagingBasis}
-          gateExecutions={calculatedResult.clinicalChecklist.gateExecutions}
-        />
-      )}
 
       {/* ============================================================
           SECTION 6: CONDITIONAL ALERTS (BOTTOM)
@@ -832,112 +821,6 @@ export function ValidationResult({ comparison, calculatedResult, parsedReport, o
         </Alert>
       )}
 
-      {/* Extracted Findings Card */}
-      <Card>
-        <CardHeader className="pb-2 sm:pb-3">
-          <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-            <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
-            Extracted Findings
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3 sm:space-y-4">
-            {parsedReport.extractedText.histologyFindings.length > 0 && (
-              <div>
-                <p className="text-[10px] sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">Histology</p>
-                <ul className="space-y-0.5 sm:space-y-1">
-                  {parsedReport.extractedText.histologyFindings.map((finding, i) => (
-                    <li key={i} className="text-xs sm:text-sm flex items-start gap-1.5 sm:gap-2">
-                      <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary flex-shrink-0 mt-1.5" />
-                      <span className="break-words">{finding}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {parsedReport.extractedText.measurementFindings.length > 0 && (
-              <div>
-                <p className="text-[10px] sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">Measurements</p>
-                <ul className="space-y-0.5 sm:space-y-1">
-                  {parsedReport.extractedText.measurementFindings.map((finding, i) => (
-                    <li key={i} className="text-xs sm:text-sm flex items-start gap-1.5 sm:gap-2">
-                      <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary flex-shrink-0 mt-1.5" />
-                      <span className="break-words">{finding}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {parsedReport.extractedText.stageFindings.length > 0 && (
-              <div>
-                <p className="text-[10px] sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">Staging</p>
-                <ul className="space-y-0.5 sm:space-y-1">
-                  {parsedReport.extractedText.stageFindings.map((finding, i) => (
-                    <li key={i} className="text-xs sm:text-sm flex items-start gap-1.5 sm:gap-2">
-                      <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary flex-shrink-0 mt-1.5" />
-                      <span className="break-words">{finding}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {parsedReport.extractedText.lymphNodeFindings.length > 0 && (
-              <div>
-                <p className="text-[10px] sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">Lymph Node Status</p>
-                <ul className="space-y-0.5 sm:space-y-1">
-                  {parsedReport.extractedText.lymphNodeFindings.map((finding, i) => (
-                    <li key={i} className="text-xs sm:text-sm flex items-start gap-1.5 sm:gap-2">
-                      <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary flex-shrink-0 mt-1.5" />
-                      <span className="break-words">{finding}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {parsedReport.extractedText.metastasisFindings.length > 0 && (
-              <div>
-                <p className="text-[10px] sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">Metastasis Status</p>
-                <ul className="space-y-0.5 sm:space-y-1">
-                  {parsedReport.extractedText.metastasisFindings.map((finding, i) => (
-                    <li key={i} className="text-xs sm:text-sm flex items-start gap-1.5 sm:gap-2">
-                      <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary flex-shrink-0 mt-1.5" />
-                      <span className="break-words">{finding}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {parsedReport.extractedText.siteFindings.length > 0 && (
-              <div>
-                <p className="text-[10px] sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">Tumor Site</p>
-                <ul className="space-y-0.5 sm:space-y-1">
-                  {parsedReport.extractedText.siteFindings.map((finding, i) => (
-                    <li key={i} className="text-xs sm:text-sm flex items-start gap-1.5 sm:gap-2">
-                      <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary flex-shrink-0 mt-1.5" />
-                      <span className="break-words">{finding}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {parsedReport.extractedText.histologyFindings.length === 0 &&
-              parsedReport.extractedText.measurementFindings.length === 0 &&
-              parsedReport.extractedText.stageFindings.length === 0 &&
-              parsedReport.extractedText.lymphNodeFindings.length === 0 &&
-              parsedReport.extractedText.metastasisFindings.length === 0 && (
-                <p className="text-xs sm:text-sm text-muted-foreground">
-                  No specific findings were extracted from the report.
-                </p>
-              )}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* ============================================================
           SECTION 7: CONFLICT DETECTED (VERY BOTTOM)
